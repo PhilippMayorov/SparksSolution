@@ -23,78 +23,134 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ==========================================================
 -- System users (nurses, admins) who use the tablet app
 
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    full_name VARCHAR(200) NOT NULL,
-    role VARCHAR(50) DEFAULT 'nurse' CHECK (role IN ('nurse', 'admin', 'doctor')),
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'NURSE' CHECK (role IN ('NURSE', 'COORDINATOR', 'ADMIN')),
+  first_name VARCHAR(100) NOT NULL,
+  last_name VARCHAR(100) NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  last_login TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for email lookups during authentication
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+-- Indexes
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_active ON users(is_active) WHERE is_active = TRUE;
+
+-- Auto-update updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_users_updated_at 
+  BEFORE UPDATE ON users
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
 
 -- ==========================================================
--- PATIENTS TABLE
+-- REFERRALS TABLE
 -- ==========================================================
--- Patient records with contact information
-
-CREATE TABLE IF NOT EXISTS patients (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    first_name VARCHAR(100) NOT NULL,
-    last_name VARCHAR(100) NOT NULL,
-    email VARCHAR(255),
-    phone VARCHAR(20) NOT NULL,  -- E.164 format recommended
-    date_of_birth DATE,
-    medical_record_number VARCHAR(50),  -- Optional external ID
-    notes TEXT,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Referral records with patient and medical information
+CREATE TABLE referrals (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  
+  -- Patient Information
+  patient_name VARCHAR(255) NOT NULL,
+  patient_dob DATE NOT NULL,
+  health_card_number VARCHAR(50) NOT NULL,
+  patient_email VARCHAR(255),  -- For sending calendar invite
+  patient_phone VARCHAR(20),   -- For Twilio voice calls
+  
+  -- Medical Details
+  condition TEXT NOT NULL,
+  specialist_type VARCHAR(50) NOT NULL CHECK (specialist_type IN (
+    'CARDIOLOGY', 'ORTHOPEDICS', 'NEUROLOGY', 'DERMATOLOGY', 
+    'OPHTHALMOLOGY', 'ENDOCRINOLOGY', 'PSYCHIATRY', 'OTHER'
+  )),
+  urgency VARCHAR(20) NOT NULL DEFAULT 'ROUTINE' CHECK (urgency IN ('ROUTINE', 'URGENT', 'CRITICAL')),
+  is_high_risk BOOLEAN DEFAULT FALSE,
+  
+  -- Status Tracking
+  status VARCHAR(50) NOT NULL DEFAULT 'PENDING' CHECK (status IN (
+    'PENDING', 'SCHEDULED', 'ATTENDED', 'MISSED', 
+    'NEEDS_REBOOK', 'ESCALATED', 'COMPLETED', 'CANCELLED'
+  )),
+  
+  -- Important Dates
+  referral_date DATE NOT NULL,
+  scheduled_date TIMESTAMPTZ,
+  completed_date TIMESTAMPTZ,
+  
+  -- Notes and Tracking
+  notes TEXT,
+  created_by_id UUID NOT NULL REFERENCES users(id),  -- FK to users table
+  
+  -- Email & Calendar Tracking
+  email_sent BOOLEAN DEFAULT FALSE,
+  email_sent_at TIMESTAMPTZ,
+  calendar_invite_sent BOOLEAN DEFAULT FALSE,
+  calendar_event_id VARCHAR(255),  -- Google Calendar Event ID
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_patients_phone ON patients(phone);
-CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(last_name, first_name);
+-- Indexes for performance
+CREATE INDEX idx_referrals_status ON referrals(status);
+CREATE INDEX idx_referrals_scheduled_date ON referrals(scheduled_date);
+CREATE INDEX idx_referrals_created_by ON referrals(created_by_id);
+CREATE INDEX idx_referrals_high_risk ON referrals(is_high_risk) WHERE is_high_risk = TRUE;
+CREATE INDEX idx_referrals_patient_email ON referrals(patient_email);
 
+-- Auto-update updated_at
+CREATE TRIGGER update_referrals_updated_at 
+  BEFORE UPDATE ON referrals
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
 -- ==========================================================
--- APPOINTMENTS TABLE
+-- STATUS HISTORY TABLE
 -- ==========================================================
--- Scheduled appointments linking patients to time slots
+-- Tracks status changes for referrals
 
-CREATE TYPE appointment_status AS ENUM (
-    'scheduled',
-    'confirmed', 
-    'missed',
-    'rescheduled',
-    'cancelled',
-    'completed'
+CREATE TABLE status_history (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  referral_id UUID NOT NULL REFERENCES referrals(id) ON DELETE CASCADE,
+  status VARCHAR(50) NOT NULL,
+  changed_by_id UUID NOT NULL REFERENCES users(id),  -- FK to users table
+  changed_at TIMESTAMPTZ DEFAULT NOW(),
+  note TEXT
 );
 
-CREATE TABLE IF NOT EXISTS appointments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    patient_id UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-    scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    duration_minutes INTEGER DEFAULT 30 CHECK (duration_minutes > 0),
-    appointment_type VARCHAR(100) NOT NULL,
-    status appointment_status DEFAULT 'scheduled',
-    notes TEXT,
-    google_event_id VARCHAR(255),  -- Google Calendar event ID
-    created_by UUID REFERENCES users(id),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- Index for fast referral history lookup
+CREATE INDEX idx_status_history_referral ON status_history(referral_id, changed_at DESC);
+CREATE INDEX idx_status_history_user ON status_history(changed_by_id);
 
--- Indexes for calendar queries
-CREATE INDEX IF NOT EXISTS idx_appointments_scheduled_at ON appointments(scheduled_at);
-CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id);
-CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
-CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(DATE(scheduled_at));
+-- Auto-create status history entry when referral status changes
+CREATE OR REPLACE FUNCTION log_status_change()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD.status IS DISTINCT FROM NEW.status THEN
+    INSERT INTO status_history (referral_id, status, changed_by_id, note)
+    VALUES (NEW.id, NEW.status, NEW.created_by_id, 'Status changed to ' || NEW.status);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_log_status_change
+  AFTER UPDATE ON referrals
+  FOR EACH ROW
+  EXECUTE FUNCTION log_status_change();
 
 
 -- ==========================================================
@@ -102,230 +158,639 @@ CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(DATE(scheduled_
 -- ==========================================================
 -- Tracks ElevenLabs outbound call attempts for missed appointments
 
-CREATE TYPE call_status AS ENUM (
-    'pending',
-    'in_progress',
-    'completed',
-    'failed',
-    'no_answer'
+CREATE TABLE call_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  referral_id UUID NOT NULL REFERENCES referrals(id) ON DELETE CASCADE,
+  call_type VARCHAR(50) NOT NULL CHECK (call_type IN (
+    'APPOINTMENT_REMINDER', 'MISSED_APPOINTMENT_FOLLOWUP',
+    'HIGH_RISK_CHECKIN', 'MANUAL_OUTREACH'
+  )),
+  phone_number VARCHAR(20) NOT NULL,
+  status VARCHAR(20) NOT NULL CHECK (status IN (
+    'SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 
+    'FAILED', 'NO_ANSWER', 'VOICEMAIL'
+  )),
+  transcript TEXT,
+  duration_seconds INTEGER,
+  twilio_call_sid VARCHAR(255),  -- Twilio Call SID for tracking
+  recording_url TEXT,
+  scheduled_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TYPE call_outcome AS ENUM (
-    'rescheduled',
-    'declined',
-    'voicemail',
-    'callback_requested',
-    'invalid_number'
-);
-
-CREATE TABLE IF NOT EXISTS call_attempts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    appointment_id UUID NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
-    patient_id UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-    elevenlabs_call_id VARCHAR(255),  -- ElevenLabs API call ID
-    status call_status DEFAULT 'pending',
-    outcome call_outcome,
-    started_at TIMESTAMP WITH TIME ZONE,
-    ended_at TIMESTAMP WITH TIME ZONE,
-    duration_seconds INTEGER,
-    transcript TEXT,
-    error_message TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Index for webhook lookups by ElevenLabs call ID
-CREATE INDEX IF NOT EXISTS idx_call_attempts_elevenlabs_id ON call_attempts(elevenlabs_call_id);
-CREATE INDEX IF NOT EXISTS idx_call_attempts_appointment ON call_attempts(appointment_id);
-CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts(status);
-
+-- Index for call history
+CREATE INDEX idx_call_logs_referral ON call_logs(referral_id, created_at DESC);
+CREATE INDEX idx_call_logs_status ON call_logs(status);
 
 -- ==========================================================
--- FLAGS TABLE
+-- EMAIL LOGS TABLE
 -- ==========================================================
--- Follow-up items for nurses when automated calls fail
+-- Email tracking for referral-related communications
 
-CREATE TYPE flag_priority AS ENUM (
-    'low',
-    'medium',
-    'high',
-    'urgent'
+CREATE TABLE email_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  referral_id UUID NOT NULL REFERENCES referrals(id) ON DELETE CASCADE,
+  email_type VARCHAR(50) NOT NULL CHECK (email_type IN (
+    'REFERRAL_CREATED', 'APPOINTMENT_REMINDER', 'APPOINTMENT_CONFIRMED',
+    'APPOINTMENT_RESCHEDULED', 'FOLLOW_UP'
+  )),
+  recipient_email VARCHAR(255) NOT NULL,
+  subject VARCHAR(500) NOT NULL,
+  status VARCHAR(20) NOT NULL CHECK (status IN (
+    'PENDING', 'SENT', 'FAILED', 'BOUNCED'
+  )),
+  sendgrid_message_id VARCHAR(255),
+  error_message TEXT,
+  calendar_invite_attached BOOLEAN DEFAULT FALSE,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TYPE flag_status AS ENUM (
-    'open',
-    'in_progress',
-    'resolved',
-    'dismissed'
-);
-
-CREATE TABLE IF NOT EXISTS flags (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    patient_id UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-    appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL,
-    call_attempt_id UUID REFERENCES call_attempts(id) ON DELETE SET NULL,
-    title VARCHAR(200) NOT NULL,
-    description TEXT,
-    priority flag_priority DEFAULT 'medium',
-    status flag_status DEFAULT 'open',
-    created_by UUID REFERENCES users(id),
-    resolved_by UUID REFERENCES users(id),
-    resolved_at TIMESTAMP WITH TIME ZONE,
-    resolution_notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Indexes for dashboard queries
-CREATE INDEX IF NOT EXISTS idx_flags_status ON flags(status);
-CREATE INDEX IF NOT EXISTS idx_flags_priority ON flags(priority);
-CREATE INDEX IF NOT EXISTS idx_flags_patient ON flags(patient_id);
-CREATE INDEX IF NOT EXISTS idx_flags_open_priority ON flags(status, priority) WHERE status = 'open';
-
+-- Indexes for email tracking
+CREATE INDEX idx_email_logs_referral ON email_logs(referral_id, created_at DESC);
+CREATE INDEX idx_email_logs_status ON email_logs(status);
+CREATE INDEX idx_email_logs_pending ON email_logs(status) WHERE status = 'PENDING';
 
 -- ==========================================================
--- CALENDAR SYNC TABLE
+-- TRIGGERS AND FUNCTIONS
 -- ==========================================================
--- Tracks Google Calendar synchronization status
+-- triggers to automate email sending and escalation
 
-CREATE TABLE IF NOT EXISTS calendar_sync (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    appointment_id UUID UNIQUE NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
-    google_event_id VARCHAR(255),
-    google_calendar_id VARCHAR(255),
-    status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'synced', 'failed', 'removed')),
-    last_synced_at TIMESTAMP WITH TIME ZONE,
-    error TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Index for sync status checks
-CREATE INDEX IF NOT EXISTS idx_calendar_sync_appointment ON calendar_sync(appointment_id);
-
-
--- ==========================================================
--- TRIGGERS FOR updated_at
--- ==========================================================
--- Automatically update the updated_at timestamp
-
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+-- Trigger: Auto-queue email when referral is created
+CREATE OR REPLACE FUNCTION trigger_referral_email()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
+  IF NEW.patient_email IS NOT NULL THEN
+    INSERT INTO email_logs (
+      referral_id,
+      email_type,
+      recipient_email,
+      subject,
+      status,
+      calendar_invite_attached
+    )
+    VALUES (
+      NEW.id,
+      'REFERRAL_CREATED',
+      NEW.patient_email,
+      'Clearwater Health - Your ' || NEW.specialist_type || ' Referral',
+      'PENDING',
+      CASE WHEN NEW.scheduled_date IS NOT NULL THEN TRUE ELSE FALSE END
+    );
+  END IF;
+  
+  RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
--- Apply trigger to all tables with updated_at
-CREATE TRIGGER update_users_updated_at
-    BEFORE UPDATE ON users
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trigger_send_referral_email
+  AFTER INSERT ON referrals
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_referral_email();
 
-CREATE TRIGGER update_patients_updated_at
-    BEFORE UPDATE ON patients
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+-- Trigger: Auto-escalate high-risk missed appointments
+CREATE OR REPLACE FUNCTION auto_escalate_high_risk()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status = 'MISSED' AND NEW.is_high_risk = TRUE THEN
+    -- Update status to ESCALATED
+    UPDATE referrals SET status = 'ESCALATED' WHERE id = NEW.id;
+    
+    -- Create alert for all nurses (user_id = NULL)
+    INSERT INTO alerts (referral_id, user_id, alert_type, message)
+    VALUES (
+      NEW.id,
+      NULL,
+      'HIGH_RISK_ESCALATION',
+      'URGENT: High-risk patient ' || NEW.patient_name || ' missed ' || 
+      NEW.specialist_type || ' appointment'
+    );
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_appointments_updated_at
-    BEFORE UPDATE ON appointments
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_flags_updated_at
-    BEFORE UPDATE ON flags
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_calendar_sync_updated_at
-    BEFORE UPDATE ON calendar_sync
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trigger_auto_escalate
+  AFTER UPDATE ON referrals
+  FOR EACH ROW
+  WHEN (OLD.status IS DISTINCT FROM NEW.status)
+  EXECUTE FUNCTION auto_escalate_high_risk();
 
 
 -- ==========================================================
--- ROW LEVEL SECURITY (RLS) - Optional
+-- ROW LEVEL SECURITY (RLS) POLICIES
 -- ==========================================================
--- Uncomment to enable RLS for production
+-- Enable RLS on all tables
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE referrals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE status_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE call_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_logs ENABLE ROW LEVEL SECURITY;
 
--- ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE call_attempts ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE flags ENABLE ROW LEVEL SECURITY;
+-- Users table policies
+CREATE POLICY "Users can read all users" ON users
+  FOR SELECT USING (true);
 
--- Example policy: Users can only see their own flags
--- CREATE POLICY "Users can view own flags" ON flags
---     FOR SELECT USING (created_by = auth.uid() OR resolved_by = auth.uid());
+CREATE POLICY "Users can update own profile" ON users
+  FOR UPDATE USING (auth.uid()::text = id::text);
 
+-- Referrals policies (authenticated users = logged-in nurses)
+CREATE POLICY "Authenticated users can read all referrals" ON referrals
+  FOR SELECT USING (auth.role() = 'authenticated');
 
+CREATE POLICY "Authenticated users can create referrals" ON referrals
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can update referrals" ON referrals
+  FOR UPDATE USING (auth.role() = 'authenticated');
+
+-- Status history policies
+CREATE POLICY "Authenticated users can read status history" ON status_history
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can create status history" ON status_history
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+-- Alerts policies
+CREATE POLICY "Users can read all alerts or own alerts" ON alerts
+  FOR SELECT USING (
+    auth.role() = 'authenticated' AND 
+    (user_id IS NULL OR auth.uid()::text = user_id::text)
+  );
+
+CREATE POLICY "Authenticated users can update alerts" ON alerts
+  FOR UPDATE USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can create alerts" ON alerts
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+-- Call logs policies
+CREATE POLICY "Authenticated users can read call logs" ON call_logs
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can create call logs" ON call_logs
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+-- Email logs policies
+CREATE POLICY "Authenticated users can read email logs" ON email_logs
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can create email logs" ON email_logs
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+-- ==========================================================
+-- Functions for Data Retrieval
+-- ==========================================================
+
+-- Function: Get overdue referrals
+CREATE OR REPLACE FUNCTION get_overdue_referrals(days_threshold INTEGER DEFAULT 14)
+RETURNS TABLE (
+  referral_id UUID,
+  patient_name VARCHAR,
+  patient_email VARCHAR,
+  patient_phone VARCHAR,
+  status VARCHAR,
+  days_overdue INTEGER,
+  is_high_risk BOOLEAN,
+  created_by_nurse VARCHAR
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    r.id,
+    r.patient_name,
+    r.patient_email,
+    r.patient_phone,
+    r.status,
+    EXTRACT(DAY FROM NOW() - r.referral_date)::INTEGER as days_overdue,
+    r.is_high_risk,
+    (u.first_name || ' ' || u.last_name)::VARCHAR as created_by_nurse
+  FROM referrals r
+  JOIN users u ON r.created_by_id = u.id
+  WHERE 
+    (r.status = 'PENDING' AND NOW() - r.referral_date > INTERVAL '1 day' * days_threshold)
+    OR (r.status = 'SCHEDULED' AND r.scheduled_date < NOW() AND r.status != 'ATTENDED')
+    OR (r.status = 'NEEDS_REBOOK' AND NOW() - r.updated_at > INTERVAL '7 days')
+  ORDER BY r.is_high_risk DESC, days_overdue DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Get dashboard statistics
+CREATE OR REPLACE FUNCTION get_dashboard_stats()
+RETURNS JSON AS $$
+DECLARE
+  result JSON;
+BEGIN
+  SELECT json_build_object(
+    'total_active', (
+      SELECT COUNT(*) FROM referrals 
+      WHERE status NOT IN ('COMPLETED', 'CANCELLED')
+    ),
+    'scheduled_this_week', (
+      SELECT COUNT(*) FROM referrals 
+      WHERE scheduled_date >= NOW() 
+      AND scheduled_date < NOW() + INTERVAL '7 days'
+    ),
+    'overdue', (SELECT COUNT(*) FROM get_overdue_referrals(0)),
+    'escalated', (SELECT COUNT(*) FROM referrals WHERE status = 'ESCALATED'),
+    'high_risk_active', (
+      SELECT COUNT(*) FROM referrals 
+      WHERE is_high_risk = TRUE 
+      AND status NOT IN ('COMPLETED', 'CANCELLED')
+    ),
+    'emails_pending', (SELECT COUNT(*) FROM email_logs WHERE status = 'PENDING'),
+    'emails_failed', (SELECT COUNT(*) FROM email_logs WHERE status = 'FAILED'),
+    'unread_alerts', (SELECT COUNT(*) FROM alerts WHERE is_dismissed = FALSE),
+    'by_status', (
+      SELECT json_object_agg(status, count)
+      FROM (
+        SELECT status, COUNT(*) as count
+        FROM referrals
+        WHERE status NOT IN ('COMPLETED', 'CANCELLED')
+        GROUP BY status
+      ) s
+    )
+  ) INTO result;
+  
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Get pending emails (for email worker)
+CREATE OR REPLACE FUNCTION get_pending_emails(batch_size INTEGER DEFAULT 50)
+RETURNS TABLE (
+  email_id UUID,
+  referral_id UUID,
+  email_type VARCHAR,
+  recipient_email VARCHAR,
+  patient_name VARCHAR,
+  patient_phone VARCHAR,
+  scheduled_date TIMESTAMPTZ,
+  specialist_type VARCHAR,
+  condition TEXT,
+  notes TEXT,
+  created_by_nurse VARCHAR
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    e.id,
+    e.referral_id,
+    e.email_type,
+    e.recipient_email,
+    r.patient_name,
+    r.patient_phone,
+    r.scheduled_date,
+    r.specialist_type,
+    r.condition,
+    r.notes,
+    (u.first_name || ' ' || u.last_name)::VARCHAR as created_by_nurse
+  FROM email_logs e
+  JOIN referrals r ON e.referral_id = r.id
+  JOIN users u ON r.created_by_id = u.id
+  WHERE e.status = 'PENDING'
+  ORDER BY e.created_at ASC
+  LIMIT batch_size;
+END;
+$$ LANGUAGE plpgsql;
 -- ==========================================================
 -- SAMPLE DATA (for development)
 -- ==========================================================
 -- Uncomment to insert test data
 
-/*
--- Sample patients
-INSERT INTO patients (first_name, last_name, email, phone, date_of_birth) VALUES
-    ('John', 'Doe', 'john.doe@example.com', '+15551234567', '1985-03-15'),
-    ('Jane', 'Smith', 'jane.smith@example.com', '+15559876543', '1990-07-22'),
-    ('Bob', 'Johnson', 'bob.j@example.com', '+15555551234', '1978-11-08');
+-- Insert demo nurse users (IMPORTANT: Use bcrypt hashed passwords)
+-- Generate hash with: python3 -c "from passlib.hash import bcrypt; print(bcrypt.hash('password123'))"
 
--- Sample appointments (adjust dates as needed)
-INSERT INTO appointments (patient_id, scheduled_at, duration_minutes, appointment_type, status) 
-SELECT 
-    id,
-    NOW() + INTERVAL '1 day',
-    30,
-    'Follow-up',
-    'scheduled'
-FROM patients 
-WHERE first_name = 'John';
+INSERT INTO users (email, password_hash, role, first_name, last_name)
+VALUES 
+  (
+    'jane.doe@clearwater.ca',
+    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYqKfN0PZdK',  -- password123
+    'NURSE',
+    'Jane',
+    'Doe'
+  ),
+  (
+    'sarah.johnson@clearwater.ca',
+    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYqKfN0PZdK',  -- password123
+    'COORDINATOR',
+    'Sarah',
+    'Johnson'
+  );
 
--- Sample missed appointment
-INSERT INTO appointments (patient_id, scheduled_at, duration_minutes, appointment_type, status)
-SELECT 
-    id,
-    NOW() - INTERVAL '2 hours',
-    30,
-    'Check-up',
-    'missed'
-FROM patients 
-WHERE first_name = 'Jane';
-*/
+-- Insert demo referrals
+INSERT INTO referrals (
+  patient_name, patient_dob, health_card_number, patient_email, patient_phone,
+  condition, specialist_type, urgency, is_high_risk, status,
+  referral_date, scheduled_date, notes, created_by_id
+)
+VALUES 
+  -- John Smith (from case study - high risk missed appointment)
+  (
+    'John Smith',
+    '1955-03-12',
+    '1234-567-890',
+    'john.smith@email.com',
+    '+12345678901',
+    'Atrial fibrillation - requires follow-up after recent episode',
+    'CARDIOLOGY',
+    'URGENT',
+    TRUE,
+    'MISSED',
+    '2026-01-15',
+    '2026-02-01 10:00:00-05',
+    'Patient has history of heart issues. Missed appointment on Feb 1.',
+    (SELECT id FROM users WHERE email = 'jane.doe@clearwater.ca')
+  ),
+  -- Mary Johnson
+  (
+    'Mary Johnson',
+    '1980-06-15',
+    '9876-543-210',
+    'mary.johnson@email.com',
+    '+12345678902',
+    'Chronic knee pain requiring orthopedic assessment',
+    'ORTHOPEDICS',
+    'ROUTINE',
+    FALSE,
+    'PENDING',
+    '2026-01-25',
+    NULL,
+    'Patient requests morning appointments',
+    (SELECT id FROM users WHERE email = 'jane.doe@clearwater.ca')
+  ),
+  -- Robert Wilson
+  (
+    'Robert Wilson',
+    '1942-11-08',
+    '5555-123-456',
+    'robert.wilson@email.com',
+    '+12345678903',
+    'Type 2 diabetes management consultation',
+    'ENDOCRINOLOGY',
+    'ROUTINE',
+    TRUE,
+    'SCHEDULED',
+    '2026-01-20',
+    '2026-02-10 14:00:00-05',
+    'Senior patient, may need transportation assistance',
+    (SELECT id FROM users WHERE email = 'sarah.johnson@clearwater.ca')
+  );
 
+-- Success message
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Database setup complete!';
+  RAISE NOTICE '📊 Tables created: 6 (users, referrals, status_history, alerts, call_logs, email_logs)';
+  RAISE NOTICE '👥 Demo users: 2';
+  RAISE NOTICE '📋 Demo referrals: 3';
+  RAISE NOTICE '📧 Email trigger: Active';
+  RAISE NOTICE '🚨 Auto-escalation trigger: Active';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔐 Login Credentials:';
+  RAISE NOTICE '   Email: jane.doe@clearwater.ca';
+  RAISE NOTICE '   Password: password123';
+END $$;
 
 -- ==========================================================
--- VIEWS (Optional - for common queries)
+-- SANITY CHECK QUERIES
 -- ==========================================================
+-- Check all tables exist
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public'
+ORDER BY table_name;
 
--- View for today's appointments
-CREATE OR REPLACE VIEW today_appointments AS
-SELECT 
-    a.*,
-    p.first_name,
-    p.last_name,
-    p.phone,
-    p.email
-FROM appointments a
-JOIN patients p ON a.patient_id = p.id
-WHERE DATE(a.scheduled_at) = CURRENT_DATE
-ORDER BY a.scheduled_at;
+-- Should return: alerts, call_logs, email_logs, referrals, status_history, users
 
--- View for open flags with patient info
-CREATE OR REPLACE VIEW open_flags_with_patient AS
+-- Check users
+SELECT id, email, role, first_name, last_name, is_active 
+FROM users;
+
+-- Should return 2 users
+
+-- Check referrals
 SELECT 
-    f.*,
-    p.first_name as patient_first_name,
-    p.last_name as patient_last_name,
-    p.phone as patient_phone
-FROM flags f
-JOIN patients p ON f.patient_id = p.id
-WHERE f.status = 'open'
-ORDER BY 
-    CASE f.priority 
-        WHEN 'urgent' THEN 1 
-        WHEN 'high' THEN 2 
-        WHEN 'medium' THEN 3 
-        ELSE 4 
-    END,
-    f.created_at DESC;
+  patient_name, 
+  specialist_type, 
+  status, 
+  is_high_risk,
+  email_sent,
+  created_at
+FROM referrals;
+
+-- Should return 3 referrals
+
+-- Check email logs (should have 3 pending emails from trigger)
+SELECT 
+  email_type,
+  recipient_email,
+  status,
+  calendar_invite_attached
+FROM email_logs;
+
+-- Should return 3 pending emails
+
+-- Test dashboard stats function
+SELECT get_dashboard_stats();
+
+-- Test overdue referrals function
+SELECT * FROM get_overdue_referrals(0);
+
+-- Test pending emails function
+SELECT * FROM get_pending_emails(10);
+
+-- ============================================
+-- USEFUL VIEWS FOR CLEARWATER REFERRAL TRACKER
+-- ============================================
+
+-- View 1: Active Referrals with Nurse Info
+CREATE OR REPLACE VIEW v_active_referrals AS
+SELECT 
+  r.id, r.patient_name, r.patient_dob, r.patient_email, r.patient_phone,
+  r.health_card_number, r.condition, r.specialist_type, r.urgency,
+  r.is_high_risk, r.status, r.referral_date, r.scheduled_date,
+  r.completed_date, r.notes, r.email_sent, r.calendar_invite_sent,
+  r.created_at, r.updated_at,
+  u.id as created_by_id, u.first_name as created_by_first_name,
+  u.last_name as created_by_last_name, u.email as created_by_email,
+  (u.first_name || ' ' || u.last_name) as created_by_full_name,
+  EXTRACT(YEAR FROM AGE(r.patient_dob))::INTEGER as patient_age,
+  EXTRACT(DAY FROM NOW() - r.created_at)::INTEGER as days_since_created,
+  CASE WHEN r.scheduled_date < NOW() AND r.status = 'SCHEDULED' THEN TRUE ELSE FALSE END as is_appointment_overdue
+FROM referrals r
+JOIN users u ON r.created_by_id = u.id
+WHERE r.status NOT IN ('COMPLETED', 'CANCELLED')
+ORDER BY r.is_high_risk DESC, r.urgency DESC, r.created_at DESC;
+
+-- View 2: Referral Details
+CREATE OR REPLACE VIEW v_referral_details AS
+SELECT 
+  r.id as referral_id, r.patient_name, r.patient_dob, r.patient_email,
+  r.patient_phone, r.condition, r.specialist_type, r.urgency,
+  r.is_high_risk, r.status, r.referral_date, r.scheduled_date, r.notes,
+  (cu.first_name || ' ' || cu.last_name) as created_by,
+  cu.email as creator_email,
+  (SELECT COUNT(*) FROM status_history sh WHERE sh.referral_id = r.id) as status_change_count,
+  (SELECT COUNT(*) FROM alerts a WHERE a.referral_id = r.id AND a.is_dismissed = FALSE) as active_alert_count,
+  (SELECT COUNT(*) FROM email_logs el WHERE el.referral_id = r.id) as email_count,
+  (SELECT COUNT(*) FROM call_logs cl WHERE cl.referral_id = r.id) as call_count,
+  (SELECT changed_at FROM status_history sh WHERE sh.referral_id = r.id ORDER BY changed_at DESC LIMIT 1) as last_status_change_at,
+  (SELECT note FROM status_history sh WHERE sh.referral_id = r.id ORDER BY changed_at DESC LIMIT 1) as last_status_note,
+  (SELECT status FROM email_logs el WHERE el.referral_id = r.id ORDER BY created_at DESC LIMIT 1) as latest_email_status,
+  r.created_at, r.updated_at
+FROM referrals r
+JOIN users cu ON r.created_by_id = cu.id;
+
+-- View 3: Dashboard Summary
+CREATE OR REPLACE VIEW v_dashboard_summary AS
+SELECT 
+  (SELECT COUNT(*) FROM referrals WHERE status NOT IN ('COMPLETED', 'CANCELLED')) as total_active,
+  (SELECT COUNT(*) FROM referrals WHERE status = 'PENDING') as pending_count,
+  (SELECT COUNT(*) FROM referrals WHERE status = 'SCHEDULED') as scheduled_count,
+  (SELECT COUNT(*) FROM referrals WHERE status = 'MISSED') as missed_count,
+  (SELECT COUNT(*) FROM referrals WHERE status = 'ESCALATED') as escalated_count,
+  (SELECT COUNT(*) FROM referrals WHERE status = 'NEEDS_REBOOK') as needs_rebook_count,
+  (SELECT COUNT(*) FROM referrals WHERE is_high_risk = TRUE AND status NOT IN ('COMPLETED', 'CANCELLED')) as high_risk_active,
+  (SELECT COUNT(*) FROM referrals WHERE scheduled_date >= NOW() AND scheduled_date < NOW() + INTERVAL '7 days') as scheduled_this_week,
+  (SELECT COUNT(*) FROM referrals WHERE scheduled_date >= NOW() AND scheduled_date < NOW() + INTERVAL '24 hours') as scheduled_today,
+  (SELECT COUNT(*) FROM referrals WHERE status = 'PENDING' AND NOW() - referral_date > INTERVAL '14 days') as overdue_pending,
+  (SELECT COUNT(*) FROM referrals WHERE status = 'SCHEDULED' AND scheduled_date < NOW()) as overdue_scheduled,
+  (SELECT COUNT(*) FROM alerts WHERE is_dismissed = FALSE) as unread_alerts,
+  (SELECT COUNT(*) FROM alerts WHERE is_dismissed = FALSE AND alert_type = 'HIGH_RISK_ESCALATION') as urgent_alerts,
+  (SELECT COUNT(*) FROM email_logs WHERE status = 'PENDING') as emails_pending,
+  (SELECT COUNT(*) FROM email_logs WHERE status = 'FAILED') as emails_failed,
+  (SELECT COUNT(*) FROM call_logs WHERE status = 'SCHEDULED') as calls_scheduled,
+  (SELECT COUNT(*) FROM referrals WHERE DATE(created_at) = CURRENT_DATE) as referrals_created_today,
+  (SELECT COUNT(*) FROM status_history WHERE DATE(changed_at) = CURRENT_DATE) as status_changes_today;
+
+-- View 4: Urgent Actions
+CREATE OR REPLACE VIEW v_urgent_actions AS
+SELECT 'HIGH_RISK_MISSED' as action_type, r.id as referral_id, r.patient_name,
+  r.specialist_type, r.status, r.scheduled_date as relevant_date,
+  (u.first_name || ' ' || u.last_name) as assigned_nurse, 1 as priority,
+  'High-risk patient missed appointment' as message, r.created_at
+FROM referrals r JOIN users u ON r.created_by_id = u.id
+WHERE r.status = 'MISSED' AND r.is_high_risk = TRUE
+UNION ALL
+SELECT 'OVERDUE_PENDING', r.id, r.patient_name, r.specialist_type, r.status,
+  r.referral_date, (u.first_name || ' ' || u.last_name), 2,
+  'Referral pending for ' || EXTRACT(DAY FROM NOW() - r.referral_date)::TEXT || ' days',
+  r.created_at
+FROM referrals r JOIN users u ON r.created_by_id = u.id
+WHERE r.status = 'PENDING' AND NOW() - r.referral_date > INTERVAL '14 days'
+UNION ALL
+SELECT 'OVERDUE_SCHEDULED', r.id, r.patient_name, r.specialist_type, r.status,
+  r.scheduled_date, (u.first_name || ' ' || u.last_name), 2,
+  'Scheduled appointment date has passed', r.created_at
+FROM referrals r JOIN users u ON r.created_by_id = u.id
+WHERE r.status = 'SCHEDULED' AND r.scheduled_date < NOW()
+ORDER BY priority ASC, relevant_date ASC;
+
+-- View 5: Upcoming Appointments
+CREATE OR REPLACE VIEW v_upcoming_appointments AS
+SELECT 
+  r.id as referral_id, r.patient_name, r.patient_email, r.patient_phone,
+  r.specialist_type, r.scheduled_date, r.urgency, r.is_high_risk, r.notes,
+  (u.first_name || ' ' || u.last_name) as created_by_nurse, u.email as nurse_email,
+  EXTRACT(DAY FROM r.scheduled_date - NOW())::INTEGER as days_until_appointment,
+  EXTRACT(HOUR FROM r.scheduled_date - NOW())::INTEGER as hours_until_appointment,
+  r.email_sent,
+  (SELECT COUNT(*) FROM call_logs cl WHERE cl.referral_id = r.id AND cl.call_type = 'APPOINTMENT_REMINDER') as reminder_calls_made,
+  r.created_at
+FROM referrals r JOIN users u ON r.created_by_id = u.id
+WHERE r.status = 'SCHEDULED' AND r.scheduled_date >= NOW() AND r.scheduled_date < NOW() + INTERVAL '7 days'
+ORDER BY r.scheduled_date ASC;
+
+-- View 6: Nurse Activity
+CREATE OR REPLACE VIEW v_nurse_activity AS
+SELECT 
+  u.id as nurse_id, u.first_name, u.last_name, u.email, u.role,
+  COUNT(r.id) as total_referrals_created,
+  COUNT(r.id) FILTER (WHERE r.status NOT IN ('COMPLETED', 'CANCELLED')) as active_referrals,
+  COUNT(r.id) FILTER (WHERE r.status = 'COMPLETED') as completed_referrals,
+  COUNT(r.id) FILTER (WHERE r.is_high_risk = TRUE) as high_risk_referrals,
+  COUNT(r.id) FILTER (WHERE r.created_at >= NOW() - INTERVAL '7 days') as referrals_this_week,
+  COUNT(sh.id) as total_status_changes,
+  COUNT(sh.id) FILTER (WHERE sh.changed_at >= NOW() - INTERVAL '7 days') as status_changes_this_week,
+  MAX(r.created_at) as last_referral_created_at,
+  MAX(sh.changed_at) as last_status_change_at,
+  u.last_login
+FROM users u
+LEFT JOIN referrals r ON u.id = r.created_by_id
+LEFT JOIN status_history sh ON u.id = sh.changed_by_id
+WHERE u.is_active = TRUE
+GROUP BY u.id, u.first_name, u.last_name, u.email, u.role, u.last_login
+ORDER BY total_referrals_created DESC;
+
+-- View 7: Communication Queue
+CREATE OR REPLACE VIEW v_communication_queue AS
+SELECT 'EMAIL' as communication_type, el.id as queue_item_id, el.referral_id,
+  r.patient_name, r.patient_email as contact, el.email_type as action_type,
+  el.status, 'Send email' as action_needed, el.created_at as queued_at, 1 as priority
+FROM email_logs el JOIN referrals r ON el.referral_id = r.id
+WHERE el.status = 'PENDING'
+UNION ALL
+SELECT 'CALL', cl.id, cl.referral_id, r.patient_name, r.patient_phone,
+  cl.call_type, cl.status, 'Make voice call', cl.scheduled_at,
+  CASE WHEN cl.call_type = 'HIGH_RISK_CHECKIN' THEN 1
+       WHEN cl.call_type = 'MISSED_APPOINTMENT_FOLLOWUP' THEN 2 ELSE 3 END
+FROM call_logs cl JOIN referrals r ON cl.referral_id = r.id
+WHERE cl.status = 'SCHEDULED' AND cl.scheduled_at <= NOW()
+ORDER BY priority ASC, queued_at ASC;
+
+-- View 8: Recent Activity Feed
+CREATE OR REPLACE VIEW v_recent_activity AS
+SELECT 
+  'REFERRAL_CREATED' as activity_type,
+  r.id as referral_id,
+  r.patient_name,
+  (u.first_name || ' ' || u.last_name) as performed_by,
+  'Created ' || r.specialist_type || ' referral' as description,
+  r.created_at as activity_time
+FROM referrals r
+JOIN users u ON r.created_by_id = u.id
+WHERE r.created_at >= NOW() - INTERVAL '7 days'
+UNION ALL
+SELECT 
+  'STATUS_CHANGED',
+  sh.referral_id,
+  r.patient_name,
+  (u.first_name || ' ' || u.last_name),
+  'Changed status to ' || sh.status,
+  sh.changed_at
+FROM status_history sh
+JOIN referrals r ON sh.referral_id = r.id
+JOIN users u ON sh.changed_by_id = u.id
+WHERE sh.changed_at >= NOW() - INTERVAL '7 days'
+UNION ALL
+SELECT 
+  'EMAIL_SENT',
+  el.referral_id,
+  r.patient_name,
+  'System',
+  'Sent ' || el.email_type || ' email',
+  el.sent_at
+FROM email_logs el
+JOIN referrals r ON el.referral_id = r.id
+WHERE el.sent_at >= NOW() - INTERVAL '7 days'
+ORDER BY activity_time DESC
+LIMIT 50;
+
+-- Success message
+DO $$
+BEGIN
+  RAISE NOTICE '✅ All views created successfully!';
+  RAISE NOTICE '📊 Views created:';
+  RAISE NOTICE '   1. v_active_referrals - Active referrals with nurse info';
+  RAISE NOTICE '   2. v_referral_details - Complete referral information';
+  RAISE NOTICE '   3. v_dashboard_summary - Real-time stats';
+  RAISE NOTICE '   4. v_urgent_actions - Items requiring attention';
+  RAISE NOTICE '   5. v_upcoming_appointments - Next 7 days appointments';
+  RAISE NOTICE '   6. v_nurse_activity - Nurse performance tracking';
+  RAISE NOTICE '   7. v_communication_queue - Pending emails/calls';
+  RAISE NOTICE '   8. v_recent_activity - Activity feed';
+END $$;
