@@ -45,13 +45,21 @@ class SupabaseClient:
 
         Returns:
             Created referral record with ID
+            
+        Raises:
+            Exception: If database operation fails
         """
         try:
+            print(f"Creating referral with data: {referral_data}")
             result = self.client.table("referrals").insert(referral_data).execute()
+            print(f"Referral created successfully: {result.data}")
             return result.data[0] if result.data else None
         except Exception as e:
-            print(f"Error creating referral: {e}")
-            return None
+            error_msg = f"Error creating referral: {str(e)}"
+            print(error_msg)
+            import traceback
+            traceback.print_exc()
+            raise Exception(error_msg) from e
 
     async def get_referral(self, referral_id: UUID) -> Optional[dict]:
         """
@@ -851,6 +859,86 @@ class SupabaseClient:
         except Exception as e:
             print(f"Error getting overdue referrals: {e}")
             return []
+
+    # ============ CALENDAR SYNC ============
+
+    async def get_calendar_sync(self, referral_id: UUID) -> Optional[dict]:
+        """
+        Get calendar sync status for a referral.
+
+        Args:
+            referral_id: UUID of the referral
+
+        Returns:
+            Calendar sync record or None
+        """
+        try:
+            result = (
+                self.client.table("referrals")
+                .select("id, calendar_event_id, calendar_invite_sent, email_sent")
+                .eq("id", str(referral_id))
+                .single()
+                .execute()
+            )
+            return result.data
+        except Exception as e:
+            print(f"Error getting calendar sync for referral {referral_id}: {e}")
+            return None
+
+    async def create_calendar_sync(self, sync_data: dict) -> Optional[dict]:
+        """
+        Create or record a calendar sync (updates referral with calendar event ID).
+
+        Args:
+            sync_data: Dictionary with referral_id and google_event_id
+
+        Returns:
+            Updated referral record
+        """
+        try:
+            referral_id = sync_data.get("referral_id")
+            updates = {
+                "calendar_event_id": sync_data.get("google_event_id"),
+                "calendar_invite_sent": True,
+                "email_sent_at": datetime.now(timezone.utc).isoformat()
+            }
+            result = (
+                self.client.table("referrals")
+                .update(updates)
+                .eq("id", str(referral_id))
+                .execute()
+            )
+            return result.data[0] if result.data else None
+        except Exception as e:
+            print(f"Error creating calendar sync: {e}")
+            return None
+
+    async def update_calendar_sync(self, referral_id: UUID, sync_data: dict) -> Optional[dict]:
+        """
+        Update calendar sync status for a referral.
+
+        Args:
+            referral_id: UUID of the referral
+            sync_data: Dictionary with google_event_id and other sync fields
+
+        Returns:
+            Updated referral record
+        """
+        try:
+            updates = {
+                "calendar_event_id": sync_data.get("google_event_id"),
+                "calendar_invite_sent": True
+            }
+            result = (
+                self.client.table("referrals")
+                .update(updates)
+                .eq("id", str(referral_id))
+                .execute()
+            )
+            return result.data[0] if result.data else None
+        except Exception as e:
+            print(f"Error updating calendar sync for referral {referral_id}: {e}")
+            return None
 
 
 # Singleton instance

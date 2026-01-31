@@ -15,8 +15,8 @@ import { format, isBefore, differenceInDays } from 'date-fns'
 import { Calendar, AlertCircle, Phone, Flag, RefreshCw } from 'lucide-react'
 import MetricsCard from '../components/MetricsCard'
 import {
-  getAppointmentsByDate,
-  getAppointmentsByStatus,
+  getReferralsByDate,
+  getReferralsByStatus,
   getOpenFlags,
   initiateCall,
   resolveFlag,
@@ -25,23 +25,23 @@ import {
 export default function Dashboard() {
   const queryClient = useQueryClient()
 
-  // Fetch today's appointments
+  // Fetch today's referrals
   const todayStr = format(new Date(), 'yyyy-MM-dd')
-  const { data: todayAppointments = [], isLoading: loadingToday } = useQuery({
-    queryKey: ['appointments', 'date', todayStr],
-    queryFn: () => getAppointmentsByDate(todayStr),
+  const { data: todayReferrals = [], isLoading: loadingToday } = useQuery({
+    queryKey: ['referrals', 'date', todayStr],
+    queryFn: () => getReferralsByDate(todayStr),
   })
 
-  // Fetch missed appointments
-  const { data: missedAppointments = [], isLoading: loadingMissed } = useQuery({
-    queryKey: ['appointments', 'status', 'missed'],
-    queryFn: () => getAppointmentsByStatus('missed'),
+  // Fetch missed referrals
+  const { data: missedReferrals = [], isLoading: loadingMissed } = useQuery({
+    queryKey: ['referrals', 'status', 'MISSED'],
+    queryFn: () => getReferralsByStatus('MISSED'),
   })
 
-  // Fetch scheduled (upcoming) appointments
-  const { data: upcomingAppointments = [] } = useQuery({
-    queryKey: ['appointments', 'status', 'scheduled'],
-    queryFn: () => getAppointmentsByStatus('scheduled'),
+  // Fetch scheduled (upcoming) referrals
+  const { data: upcomingReferrals = [] } = useQuery({
+    queryKey: ['referrals', 'status', 'SCHEDULED'],
+    queryFn: () => getReferralsByStatus('SCHEDULED'),
   })
 
   // Fetch flags
@@ -57,10 +57,10 @@ export default function Dashboard() {
 
   // Initiate call mutation
   const callMutation = useMutation({
-    mutationFn: ({ appointmentId, patientId }) =>
-      initiateCall(appointmentId, patientId),
+    mutationFn: ({ referralId, phoneNumber }) =>
+      initiateCall(referralId, phoneNumber),
     onSuccess: () => {
-      queryClient.invalidateQueries(['appointments'])
+      queryClient.invalidateQueries(['referrals'])
     },
   })
 
@@ -72,15 +72,15 @@ export default function Dashboard() {
     },
   })
 
-  const handleActivateAgentCall = (appointment) => {
+  const handleActivateAgentCall = (referral) => {
     callMutation.mutate({
-      appointmentId: appointment.id,
-      patientId: appointment.patient_id || appointment.patient?.id,
+      referralId: referral.id,
+      phoneNumber: referral.patient_phone,
     })
   }
 
-  const handleCallPatient = (appointment) => {
-    const phone = appointment.patient?.phone || appointment.phoneNumber
+  const handleCallPatient = (referral) => {
+    const phone = referral.patient_phone
     if (phone) {
       window.open(`tel:${phone}`, '_self')
     } else {
@@ -94,13 +94,13 @@ export default function Dashboard() {
 
   // Calculate metrics
   const metrics = useMemo(() => ({
-    upcoming: upcomingAppointments.filter(apt => 
-      !isBefore(new Date(apt.scheduled_at), new Date())
+    upcoming: upcomingReferrals.filter(ref => 
+      !isBefore(new Date(ref.scheduled_date), new Date())
     ).length,
-    missed: missedAppointments.length,
+    missed: missedReferrals.length,
     agentCalls: 2, // TODO: Get from backend
     flagged: flaggedPatients.length,
-  }), [upcomingAppointments, missedAppointments, flaggedPatients])
+  }), [upcomingReferrals, missedReferrals, flaggedPatients])
 
   const isLoading = loadingToday || loadingMissed
 
@@ -168,10 +168,8 @@ export default function Dashboard() {
               <div className="text-center py-8 text-gray-500">No flagged patients at this time</div>
             ) : (
               flaggedPatients.map(flag => {
-                const apt = flag.appointment || {}
-                const patient = apt.patient || flag.patient || {}
-                const patientName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown Patient'
-                const phone = patient.phone || 'No phone'
+                const patientName = `${flag.patient_first_name || ''} ${flag.patient_last_name || ''}`.trim() || 'Unknown Patient'
+                const phone = flag.patient_phone || 'No phone'
                 
                 return (
                   <div key={flag.id} className="bg-white rounded-lg border-2 border-red-200 p-6 shadow-sm">
@@ -235,26 +233,25 @@ export default function Dashboard() {
           </p>
           
           <div className="space-y-4">
-            {missedAppointments.length === 0 ? (
+            {missedReferrals.length === 0 ? (
               <div className="text-center py-8 text-gray-500">No missed appointments requiring follow-up</div>
             ) : (
-              missedAppointments.slice(0, 3).map(apt => {
-                const patient = apt.patient || {}
-                const patientName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown Patient'
+              missedReferrals.slice(0, 3).map(ref => {
+                const patientName = `${ref.patient_first_name || ''} ${ref.patient_last_name || ''}`.trim() || 'Unknown Patient'
                 
                 return (
-                  <div key={apt.id} className="bg-orange-50 rounded-lg border border-orange-200 p-6">
+                  <div key={ref.id} className="bg-orange-50 rounded-lg border border-orange-200 p-6">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900 mb-3">{patientName}</h3>
                         <div className="grid grid-cols-3 gap-4 text-sm text-gray-600 mb-4">
                           <div>
                             <span className="font-medium">Missed Date:</span><br />
-                            {apt.scheduled_at ? format(new Date(apt.scheduled_at), 'MMM d, yyyy') : 'N/A'}
+                            {ref.scheduled_date ? format(new Date(ref.scheduled_date), 'MMM d, yyyy') : 'N/A'}
                           </div>
                           <div>
                             <span className="font-medium">Referral Type:</span><br />
-                            {apt.appointment_type || apt.type || 'Consultation'}
+                            {ref.condition || ref.specialist_type || 'Consultation'}
                           </div>
                           <div>
                             <span className="font-medium">Last Contact:</span><br />
@@ -264,7 +261,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <button
-                      onClick={() => handleActivateAgentCall(apt)}
+                      onClick={() => handleActivateAgentCall(ref)}
                       disabled={callMutation.isPending}
                       className="w-full px-6 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                     >
@@ -301,32 +298,31 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {upcomingAppointments.length === 0 ? (
+                {upcomingReferrals.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="text-center py-8 text-gray-500">No upcoming appointments</td>
                   </tr>
                 ) : (
-                  upcomingAppointments.slice(0, 10).map(apt => {
-                    const patient = apt.patient || {}
-                    const patientName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown Patient'
-                    const phone = patient.phone || ''
-                    const daysUntil = apt.scheduled_at ? differenceInDays(new Date(apt.scheduled_at), new Date()) : 0
+                  upcomingReferrals.slice(0, 10).map(ref => {
+                    const patientName = `${ref.patient_first_name || ''} ${ref.patient_last_name || ''}`.trim() || 'Unknown Patient'
+                    const phone = ref.patient_phone || ''
+                    const daysUntil = ref.scheduled_date ? differenceInDays(new Date(ref.scheduled_date), new Date()) : 0
                     
                     return (
-                      <tr key={apt.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <tr key={ref.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-4 px-4">
                           <div className="font-medium text-gray-900">{patientName}</div>
                           {phone && <div className="text-sm text-gray-500">{phone}</div>}
                         </td>
                         <td className="py-4 px-4 text-sm text-gray-700">
-                          {apt.appointment_type || apt.type || 'Consultation'}
+                          {ref.condition || ref.specialist_type || 'Consultation'}
                         </td>
                         <td className="py-4 px-4">
                           <div className="text-sm text-gray-900">
-                            {apt.scheduled_at ? format(new Date(apt.scheduled_at), 'MMM d, yyyy') : 'N/A'}
+                            {ref.scheduled_date ? format(new Date(ref.scheduled_date), 'MMM d, yyyy') : 'N/A'}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {apt.scheduled_at ? format(new Date(apt.scheduled_at), 'h:mm a') : ''}
+                            {ref.scheduled_date ? format(new Date(ref.scheduled_date), 'h:mm a') : ''}
                           </div>
                         </td>
                         <td className="py-4 px-4">

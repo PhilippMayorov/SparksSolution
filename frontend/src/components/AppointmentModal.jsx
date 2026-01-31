@@ -21,31 +21,35 @@ export default function AppointmentModal({
   isLoading 
 }) {
   const [patientName, setPatientName] = useState('')
+  const [patientDob, setPatientDob] = useState('')
+  const [healthCardNumber, setHealthCardNumber] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
-  const [doctor, setDoctor] = useState('')
+  const [patientEmail, setPatientEmail] = useState('')
+  const [specialistType, setSpecialistType] = useState('')
   const [date, setDate] = useState('')
-  const [time, setTime] = useState('')
-  const [type, setType] = useState('')
+  const [condition, setCondition] = useState('')
   const [notes, setNotes] = useState('')
 
   useEffect(() => {
     if (appointment) {
-      const patient = appointment.patient || {}
-      setPatientName(appointment.patientName || `${patient.first_name || ''} ${patient.last_name || ''}`.trim())
-      setPhoneNumber(appointment.phoneNumber || patient.phone || '')
-      setDoctor(appointment.doctor || '')
-      setDate(appointment.date ? format(new Date(appointment.date), 'yyyy-MM-dd') : 
-              appointment.scheduled_at ? format(new Date(appointment.scheduled_at), 'yyyy-MM-dd') : '')
-      setTime(appointment.time || (appointment.scheduled_at ? format(new Date(appointment.scheduled_at), 'HH:mm') : ''))
-      setType(appointment.type || appointment.appointment_type || 'Consultation')
+      setPatientName(appointment.patient_name || '')
+      setPatientDob(appointment.patient_dob || '')
+      setHealthCardNumber(appointment.health_card_number || '')
+      setPhoneNumber(appointment.patient_phone || '')
+      setPatientEmail(appointment.patient_email || '')
+      setSpecialistType(appointment.specialist_type || '')
+      setDate(appointment.scheduled_date ? format(new Date(appointment.scheduled_date), 'yyyy-MM-dd') : '')
+      setCondition(appointment.condition || '')
       setNotes(appointment.notes || '')
     } else {
       setPatientName('')
+      setPatientDob('')
+      setHealthCardNumber('')
       setPhoneNumber('')
-      setDoctor('Dr. Smith')
+      setPatientEmail('')
+      setSpecialistType('CARDIOLOGY')
       setDate(selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'))
-      setTime('09:00')
-      setType('Consultation')
+      setCondition('')
       setNotes('')
     }
   }, [appointment, selectedDate, isOpen])
@@ -53,16 +57,15 @@ export default function AppointmentModal({
   const handleSubmit = (e) => {
     e.preventDefault()
     onSave({
-      patientName,
-      phoneNumber,
-      doctor,
-      date: new Date(date),
-      time,
-      type,
-      notes,
-      // For backend API
-      scheduled_at: `${date}T${time}:00`,
-      appointment_type: type.toLowerCase(),
+      patient_name: patientName,
+      patient_dob: patientDob,
+      health_card_number: healthCardNumber,
+      patient_phone: phoneNumber,
+      patient_email: patientEmail,
+      specialist_type: specialistType,
+      scheduled_date: date,
+      condition: condition,
+      notes: notes,
     })
   }
 
@@ -100,6 +103,33 @@ export default function AppointmentModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date of Birth
+            </label>
+            <input
+              type="date"
+              value={patientDob}
+              onChange={(e) => setPatientDob(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Health Card Number
+            </label>
+            <input
+              type="text"
+              value={healthCardNumber}
+              onChange={(e) => setHealthCardNumber(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter health card number"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Phone Number
             </label>
             <input
@@ -114,28 +144,42 @@ export default function AppointmentModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Doctor / Specialist
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={patientEmail}
+              onChange={(e) => setPatientEmail(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="patient@example.com"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Specialist Type
             </label>
             <select
-              value={doctor}
-              onChange={(e) => setDoctor(e.target.value)}
+              value={specialistType}
+              onChange={(e) => setSpecialistType(e.target.value)}
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="Dr. Smith">Dr. Smith</option>
-              <option value="Dr. Johnson">Dr. Johnson</option>
-              <option value="Dr. Williams">Dr. Williams</option>
-              <option value="Dr. Brown">Dr. Brown</option>
-              <option value="Dr. Davis">Dr. Davis</option>
-              <option value="Dr. Martinez">Dr. Martinez</option>
-              <option value="Dr. Chen">Dr. Chen</option>
-              <option value="Dr. Torres">Dr. Torres</option>
+              <option value="CARDIOLOGY">Cardiology</option>
+              <option value="ORTHOPEDICS">Orthopedics</option>
+              <option value="NEUROLOGY">Neurology</option>
+              <option value="DERMATOLOGY">Dermatology</option>
+              <option value="OPHTHALMOLOGY">Ophthalmology</option>
+              <option value="ENDOCRINOLOGY">Endocrinology</option>
+              <option value="PSYCHIATRY">Psychiatry</option>
+              <option value="OTHER">Other</option>
             </select>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date
+              Scheduled Date
             </label>
             <input
               type="date"
@@ -148,38 +192,16 @@ export default function AppointmentModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Time
+              Condition
             </label>
-            <input
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
+            <textarea
+              value={condition}
+              onChange={(e) => setCondition(e.target.value)}
               required
+              rows={2}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Describe the medical condition..."
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Appointment Type
-            </label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="Consultation">Consultation</option>
-              <option value="Follow-up">Follow-up</option>
-              <option value="Check-up">Check-up</option>
-              <option value="Vaccination">Vaccination</option>
-              <option value="Treatment">Treatment</option>
-              <option value="Cardiology">Cardiology</option>
-              <option value="Orthopedics">Orthopedics</option>
-              <option value="Mental Health">Mental Health</option>
-              <option value="Dermatology">Dermatology</option>
-              <option value="Emergency">Emergency</option>
-            </select>
           </div>
 
           <div>
@@ -189,7 +211,7 @@ export default function AppointmentModal({
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              rows={3}
+              rows={2}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Additional notes..."
             />
@@ -208,7 +230,7 @@ export default function AppointmentModal({
               disabled={isLoading}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Saving...' : (appointment ? 'Save Changes' : 'Add Appointment')}
+              {isLoading ? 'Saving...' : (appointment ? 'Save Changes' : 'Add Referral')}
             </button>
           </div>
         </form>

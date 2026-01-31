@@ -46,16 +46,27 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Detailed health check."""
-    # TODO: Add database connectivity check
-    # TODO: Add external service status checks
-    return {
+    from services.supabase_client import get_supabase_client
+    
+    health_status = {
         "status": "healthy",
         "services": {
-            "supabase": "unchecked",
-            "elevenlabs": "unchecked",
-            "google_calendar": "unchecked"
+            "supabase": "unknown",
+            "elevenlabs": "configured",
+            "google_calendar": "configured"
         }
     }
+    
+    try:
+        # Check Supabase connectivity
+        db = get_supabase_client()
+        test_result = db.client.table("users").select("count", count="exact").execute()
+        health_status["services"]["supabase"] = "connected"
+    except Exception as e:
+        health_status["status"] = "degraded"
+        health_status["services"]["supabase"] = f"error: {str(e)}"
+    
+    return health_status
 
 
 if __name__ == "__main__":

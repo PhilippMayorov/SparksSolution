@@ -16,9 +16,9 @@ import DayView from '../components/DayView'
 import AppointmentModal from '../components/AppointmentModal'
 import AppointmentSidePanel from '../components/AppointmentSidePanel'
 import {
-  getAppointmentsByDate,
-  createAppointment,
-  updateAppointment,
+  getReferralsByDate,
+  createReferral,
+  updateReferral,
   initiateCall,
 } from '../api/client'
 
@@ -46,45 +46,79 @@ export default function CalendarPage() {
 
   const { start, end } = getDateRange()
   
-  // Fetch all appointments for the date range
+  // Fetch all referrals for the date range with parallel requests
   const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ['appointments', 'range', format(start, 'yyyy-MM-dd'), format(end, 'yyyy-MM-dd')],
+    queryKey: ['referrals', 'range', format(start, 'yyyy-MM-dd'), format(end, 'yyyy-MM-dd')],
     queryFn: async () => {
-      const allAppointments = []
+      const dates = []
       let currentDate = start
       while (currentDate <= end) {
-        try {
-          const dayAppointments = await getAppointmentsByDate(format(currentDate, 'yyyy-MM-dd'))
-          allAppointments.push(...dayAppointments)
-        } catch (e) {
-          // Ignore errors for individual days
-        }
+        dates.push(format(currentDate, 'yyyy-MM-dd'))
         currentDate = addDays(currentDate, 1)
       }
-      return allAppointments
+      
+      // Fetch all dates in parallel instead of sequentially
+      const results = await Promise.allSettled(
+        dates.map(date => getReferralsByDate(date))
+      )
+      
+      const allReferrals = []
+      results.forEach(result => {
+        if (result.status === 'fulfilled') {
+          allReferrals.push(...(result.value || []))
+        }
+      })
+      
+      return allReferrals
     },
-    staleTime: 30000,
+    staleTime: 60000, // Increase stale time from 30s to 60s
   })
 
-  // Create appointment mutation
+  // Create referral mutation
   const createMutation = useMutation({
-    mutationFn: (data) => createAppointment({
-      patient_id: data.patient_id,
-      scheduled_at: data.scheduled_at,
-      appointment_type: data.appointment_type,
-      notes: data.notes,
-    }),
+    mutationFn: (data) => {
+      // Get user ID from localStorage
+      const userId = localStorage.getItem('user_id') || '12345678-1234-5678-1234-567812345678'
+      const payload = {
+        patient_name: data.patient_name,
+        patient_dob: data.patient_dob,
+        health_card_number: data.health_card_number,
+        patient_phone: data.patient_phone || '',
+        patient_email: data.patient_email,
+        condition: data.condition,
+        specialist_type: data.specialist_type,
+        scheduled_date: `${data.scheduled_date}T09:00:00Z`,
+        notes: data.notes || '',
+        created_by_id: userId,
+        referral_date: new Date().toISOString().split('T')[0],
+        urgency: 'ROUTINE',
+        is_high_risk: false,
+      }
+      console.log('Creating referral with payload:', payload)
+      return createReferral(payload)
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries(['appointments'])
+      // Only invalidate the specific date range query
+      queryClient.invalidateQueries({
+        queryKey: ['referrals', 'range'],
+      })
       setIsModalOpen(false)
     },
+    onError: (error) => {
+      console.error('Error creating referral:', error)
+      console.error('Error response:', error.response?.data)
+      alert(`Error creating referral: ${error.response?.data?.detail || error.message}`)
+    },
   })
 
-  // Update appointment mutation  
+  // Update referral mutation  
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...data }) => updateAppointment(id, data),
+    mutationFn: ({ id, ...data }) => updateReferral(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['appointments'])
+      // Only invalidate the specific date range query
+      queryClient.invalidateQueries({
+        queryKey: ['referrals', 'range'],
+      })
       setIsModalOpen(false)
       setEditingAppointment(null)
     },
@@ -92,12 +126,12 @@ export default function CalendarPage() {
 
   // Initiate call mutation
   const callMutation = useMutation({
-    mutationFn: (appointmentId) => {
-      const apt = appointments.find(a => a.id === appointmentId)
-      return initiateCall(appointmentId, apt?.patient_id || apt?.patient?.id)
+    mutationFn: (referralId) => {
+      const referral = appointments.find(a => a.id === referralId)
+      return initiateCall(referralId, referral?.patient_phone)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['appointments'])
+      queryClient.invalidateQueries(['referrals'])
       setSelectedAppointment(null)
     },
   })
@@ -123,9 +157,9 @@ export default function CalendarPage() {
     callMutation.mutate(appointmentId)
   }
 
-  const handleCallManually = (appointmentId) => {
-    const apt = appointments.find(a => a.id === appointmentId)
-    const phone = apt?.patient?.phone || apt?.phoneNumber
+  const handleCallManually = (referralId) => {
+    const referral = appointments.find(a => a.id === referralId)
+    const phone = referral?.patient_phone
     if (phone) {
       window.open(`tel:${phone}`, '_self')
     } else {

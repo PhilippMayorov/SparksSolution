@@ -8,7 +8,7 @@ for validation, serialization, and documentation.
 from datetime import datetime, date
 from typing import Optional, List
 from enum import Enum
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from uuid import UUID
 
 
@@ -127,7 +127,7 @@ class ReferralBase(BaseModel):
     patient_name: str = Field(..., min_length=1, max_length=255)
     patient_dob: date
     health_card_number: str = Field(..., min_length=1, max_length=50)
-    patient_email: Optional[EmailStr] = None
+    patient_email: Optional[str] = Field(default=None)
     patient_phone: Optional[str] = Field(None, max_length=20)
 
     condition: str = Field(..., min_length=1)
@@ -138,6 +138,14 @@ class ReferralBase(BaseModel):
     referral_date: date
     scheduled_date: Optional[datetime] = None
     notes: Optional[str] = None
+
+    @field_validator('patient_email', mode='before')
+    @classmethod
+    def validate_email(cls, v):
+        """Convert empty strings to None for email field."""
+        if v == '':
+            return None
+        return v
 
 
 class ReferralCreate(ReferralBase):
@@ -150,7 +158,7 @@ class ReferralUpdate(BaseModel):
     patient_name: Optional[str] = None
     patient_dob: Optional[date] = None
     health_card_number: Optional[str] = None
-    patient_email: Optional[EmailStr] = None
+    patient_email: Optional[str] = Field(default=None)
     patient_phone: Optional[str] = None
 
     condition: Optional[str] = None
@@ -162,6 +170,14 @@ class ReferralUpdate(BaseModel):
     scheduled_date: Optional[datetime] = None
     completed_date: Optional[datetime] = None
     notes: Optional[str] = None
+
+    @field_validator('patient_email', mode='before')
+    @classmethod
+    def validate_email(cls, v):
+        """Convert empty strings to None for email field."""
+        if v == '':
+            return None
+        return v
 
 
 class ReferralResponse(ReferralBase):

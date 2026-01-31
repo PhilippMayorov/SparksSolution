@@ -71,31 +71,47 @@ async def create_referral(referral: ReferralCreate):
     """
     db = get_supabase_client()
 
-    # Convert Pydantic model to dict
-    referral_data = referral.model_dump()
+    try:
+        # Convert Pydantic model to dict
+        referral_data = referral.model_dump()
 
-    # Convert enums to strings
-    referral_data["specialist_type"] = referral.specialist_type.value
-    referral_data["urgency"] = referral.urgency.value
-    referral_data["status"] = ReferralStatus.PENDING.value
-    referral_data["created_by_id"] = str(referral.created_by_id)
+        # Convert enums to strings
+        referral_data["specialist_type"] = referral.specialist_type.value
+        referral_data["urgency"] = referral.urgency.value
+        referral_data["status"] = ReferralStatus.PENDING.value
+        referral_data["created_by_id"] = str(referral.created_by_id)
 
-    # Convert date to string
-    referral_data["referral_date"] = referral.referral_date.isoformat()
-    if referral.patient_dob:
-        referral_data["patient_dob"] = referral.patient_dob.isoformat()
-    if referral.scheduled_date:
-        referral_data["scheduled_date"] = referral.scheduled_date.isoformat()
+        # Convert date to string
+        referral_data["referral_date"] = referral.referral_date.isoformat()
+        if referral.patient_dob:
+            referral_data["patient_dob"] = referral.patient_dob.isoformat()
+        if referral.scheduled_date:
+            referral_data["scheduled_date"] = referral.scheduled_date.isoformat()
 
-    created = await db.create_referral(referral_data)
-
-    if not created:
+        print(f"DEBUG: Attempting to create referral with data: {referral_data}")
+        
+        # Try to create the referral
+        created = await db.create_referral(referral_data)
+        
+        return created
+        
+    except Exception as e:
+        error_detail = str(e)
+        print(f"Error in create_referral: {error_detail}")
+        import traceback
+        traceback.print_exc()
+        
+        # Check if it's a foreign key constraint error
+        if "created_by_id" in error_detail or "users" in error_detail:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid user ID. Ensure the user exists in the system. Error: {error_detail}"
+            )
+        
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create referral"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to create referral: {error_detail}"
         )
-
-    return created
 
 
 @router.get("/{referral_id}", response_model=ReferralResponse)

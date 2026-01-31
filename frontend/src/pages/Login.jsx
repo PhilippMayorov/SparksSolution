@@ -30,7 +30,9 @@ export default function Login() {
       localStorage.setItem('isAuthenticated', 'true')
       localStorage.setItem('auth_token', 'demo-token')
       localStorage.setItem('nurseName', 'Jessica Williams')
-      navigate('/calendar')
+      // Use a consistent UUID for demo user
+      localStorage.setItem('user_id', '12345678-1234-5678-1234-567812345678')
+      navigate('/')
       return
     }
 
@@ -39,7 +41,10 @@ export default function Login() {
       const data = await login(email, password)
       localStorage.setItem('isAuthenticated', 'true')
       localStorage.setItem('nurseName', data.user?.first_name + ' ' + data.user?.last_name || 'Nurse')
-      navigate('/calendar')
+      if (data.user?.id) {
+        localStorage.setItem('user_id', data.user.id)
+      }
+      navigate('/')
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid credentials. Try nurse@hospital.com / nurse123')
     } finally {

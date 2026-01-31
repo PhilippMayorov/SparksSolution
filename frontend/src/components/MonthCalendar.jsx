@@ -31,7 +31,7 @@ export default function MonthCalendar({
 
   const getAppointmentsForDay = (date) => {
     return appointments.filter(apt => {
-      const aptDate = apt.scheduled_at || apt.date
+      const aptDate = apt.scheduled_date
       return aptDate && isSameDay(new Date(aptDate), date)
     })
   }
@@ -123,9 +123,9 @@ export default function MonthCalendar({
                 {dayAppointments.slice(0, 2).map(apt => (
                   <div
                     key={apt.id}
-                    className={`text-xs px-2 py-1 rounded truncate border ${getAppointmentColor(apt.type || apt.appointment_type)}`}
+                    className={`text-xs px-2 py-1 rounded truncate border ${getAppointmentColor(apt.specialist_type)}`}
                   >
-                    {apt.time || format(new Date(apt.scheduled_at), 'HH:mm')} - {apt.patientName || apt.patient?.first_name || 'Patient'}
+                    {format(new Date(apt.scheduled_date), 'HH:mm')} - {apt.patient_name}
                   </div>
                 ))}
                 {dayAppointments.length > 2 && (

@@ -62,7 +62,7 @@ CREATE TABLE referrals (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   
   -- Patient Information
-  patient_name VARCHAR(255) NOT NULL,
+  patient_name TEXT NOT NULL,
   patient_dob DATE NOT NULL,
   health_card_number VARCHAR(50) NOT NULL,
   patient_email VARCHAR(255),  -- For sending calendar invite
@@ -232,6 +232,50 @@ CREATE TRIGGER trigger_log_status_change
 
 
 -- ==========================================================
+-- FLAGS TABLE
+-- ==========================================================
+-- Nurse follow-up flags for patients who need attention
+
+CREATE TABLE flags (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  referral_id UUID NOT NULL REFERENCES referrals(id) ON DELETE CASCADE,
+  
+  -- Flag details
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  priority VARCHAR(20) NOT NULL DEFAULT 'medium' CHECK (priority IN (
+    'low', 'medium', 'high', 'urgent'
+  )),
+  status VARCHAR(20) NOT NULL DEFAULT 'open' CHECK (status IN (
+    'open', 'in_progress', 'resolved', 'dismissed'
+  )),
+  
+  -- Assignment and tracking
+  assigned_to_id UUID REFERENCES users(id),
+  created_by_id UUID NOT NULL REFERENCES users(id),
+  resolved_by_id UUID REFERENCES users(id),
+  resolved_at TIMESTAMPTZ,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for flags
+CREATE INDEX idx_flags_referral ON flags(referral_id);
+CREATE INDEX idx_flags_status ON flags(status);
+CREATE INDEX idx_flags_priority ON flags(priority);
+CREATE INDEX idx_flags_assigned_to ON flags(assigned_to_id);
+CREATE INDEX idx_flags_open ON flags(status, created_at DESC) WHERE status = 'open';
+
+-- Auto-update updated_at for flags
+CREATE TRIGGER update_flags_updated_at 
+  BEFORE UPDATE ON flags
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+
+-- ==========================================================
 -- CALL ATTEMPTS TABLE
 -- ==========================================================
 -- Tracks ElevenLabs outbound call attempts for missed appointments
@@ -372,6 +416,7 @@ CREATE TRIGGER trigger_auto_escalate
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE referrals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE status_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE call_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE email_logs ENABLE ROW LEVEL SECURITY;
@@ -399,6 +444,16 @@ CREATE POLICY "Authenticated users can read status history" ON status_history
 
 CREATE POLICY "Authenticated users can create status history" ON status_history
   FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+-- Flags policies
+CREATE POLICY "Authenticated users can read flags" ON flags
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can create flags" ON flags
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can update flags" ON flags
+  FOR UPDATE USING (auth.role() = 'authenticated');
 
 -- Alerts policies
 CREATE POLICY "Users can read all alerts or own alerts" ON alerts

@@ -20,13 +20,12 @@ export default function AppointmentSidePanel({
   if (!appointment) return null
 
   // Normalize appointment data from backend or local format
-  const patient = appointment.patient || {}
-  const patientName = appointment.patientName || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown Patient'
-  const phoneNumber = appointment.phoneNumber || patient.phone || 'No phone'
-  const appointmentDate = appointment.date || appointment.scheduled_at
-  const time = appointment.time || (appointmentDate ? format(new Date(appointmentDate), 'HH:mm') : '')
-  const doctor = appointment.doctor || 'Specialist'
-  const type = appointment.type || appointment.appointment_type || 'Consultation'
+  const patientName = appointment.patient_name || 'Unknown Patient'
+  const phoneNumber = appointment.patient_phone || 'No phone'
+  const appointmentDate = appointment.scheduled_date
+  const time = appointmentDate ? format(new Date(appointmentDate), 'HH:mm') : ''
+  const doctor = appointment.specialist_type || 'Specialist'
+  const type = appointment.condition || 'Referral'
   const notes = appointment.notes || ''
 
   return (
