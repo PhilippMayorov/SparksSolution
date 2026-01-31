@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global styles */
+body {
+  @apply bg-gray-50 text-gray-900;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+/* React Big Calendar overrides */
+.rbc-calendar {
+  @apply bg-white rounded-lg shadow-sm;
+}
+
+.rbc-header {
+  @apply py-3 font-semibold text-gray-700;
+}
+
+.rbc-today {
+  @apply bg-primary-50;
+}
+
+.rbc-event {
+  @apply bg-primary-500 rounded px-2 py-1;
+}
+
+.rbc-event.missed {
+  @apply bg-danger;
+}
+
+.rbc-event.rescheduled {
+  @apply bg-warning;
+}
+
+.rbc-event.completed {
+  @apply bg-success;
+}
