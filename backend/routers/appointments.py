@@ -43,8 +43,8 @@ async def list_appointments(
     elif status:
         appointments = await db.get_appointments_by_status(status.value)
     else:
-        # TODO: Implement general listing with pagination
-        appointments = []
+        # Return all appointments when no filter is provided
+        appointments = await db.get_all_appointments(limit=limit, offset=offset)
     
     return appointments
 
@@ -54,51 +54,82 @@ async def create_appointment(appointment: AppointmentCreate):
     """
     Create a new appointment.
     
-    After creation, triggers Google Calendar event creation
-    if patient has email on file.
+    Since patients are embedded in referrals, we'll create a new referral
+    with the appointment data. If patient_id is provided, we'll try to
+    copy patient info from an existing referral.
     """
-    db = get_supabase_client()
-    
-    # Verify patient exists
-    patient = await db.get_patient(appointment.patient_id)
-    if not patient:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Patient {appointment.patient_id} not found"
-        )
-    
-    # Create appointment in database
-    appointment_data = appointment.model_dump()
-    appointment_data["status"] = AppointmentStatus.SCHEDULED.value
-    appointment_data["patient_id"] = str(appointment.patient_id)
-    
-    created = await db.create_appointment(appointment_data)
-    
-    if not created:
+    try:
+
+        db = get_supabase_client()
+
+        # Create appointment in database
+        appointment_data = appointment.model_dump(mode='json')
+
+        # Sanitize phone number - remove spaces, dashes, parentheses
+        if appointment_data.get("patient_phone"):
+            phone = appointment_data["patient_phone"]
+            # Remove common formatting characters
+            sanitized_phone = ''.join(c for c in phone if c.isdigit() or c == '+')
+            appointment_data["patient_phone"] = sanitized_phone if sanitized_phone else None
+
+        appointment_data["status"] = AppointmentStatus.SCHEDULED.value
+
+        # print("appointment_data:", appointment_data["status"])
+        
+        # Try to get existing patient info if patient_id is provided
+        if appointment.patient_id:
+
+            print("patient exists fetching existing patient info for ID:", appointment.patient_id)
+
+            try:
+                existing_patient = await db.get_patient(appointment.patient_id)
+
+                print("existing_patient:", existing_patient)
+                if existing_patient:
+                    # Use existing patient info
+                    appointment_data.update({
+                        "patient_name": f"{existing_patient.get('first_name', '')} {existing_patient.get('last_name', '')}".strip(),
+                        "patient_phone": existing_patient.get('phone', None),
+                        "patient_email": existing_patient.get('email', None),
+                        "patient_dob": existing_patient.get('date_of_birth', '2000-01-01'),
+                    })
+            except Exception as e:
+                # If patient not found, we'll create a new one
+                print(f"Error getting patient: {e}")
+        
+
+        # Set default patient info if not provided
+        if not appointment_data.get("patient_name"):
+            appointment_data.update({
+                "patient_name": "New Patient",
+                "patient_phone": None,
+                "patient_email": None,
+                "patient_dob": "2000-01-01",
+                "health_card_number": f"TEMP-{appointment.patient_id}",
+                "condition": "General consultation",
+                "appointment_type": "OTHER",
+                "urgency": "ROUTINE",
+            })
+
+        created = await db.create_appointment(appointment_data)
+        
+        if not created:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create appointment"
+            )
+        
+        return created
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in create_appointment: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create appointment"
+            detail=f"Error creating appointment: {str(e)}"
         )
-    
-    # TODO: Create Google Calendar event
-    # try:
-    #     calendar = get_calendar_service()
-    #     event = await calendar.create_appointment_event(
-    #         appointment_id=created["id"],
-    #         patient_name=f"{patient['first_name']} {patient['last_name']}",
-    #         patient_email=patient.get("email"),
-    #         appointment_type=appointment.appointment_type,
-    #         scheduled_at=appointment.scheduled_at,
-    #         duration_minutes=appointment.duration_minutes,
-    #         notes=appointment.notes
-    #     )
-    #     # Update appointment with Google event ID
-    #     await db.update_appointment(created["id"], {"google_event_id": event["google_event_id"]})
-    # except Exception as e:
-    #     # Log error but don't fail appointment creation
-    #     print(f"Failed to create calendar event: {e}")
-    
-    return created
 
 
 @router.get("/{appointment_id}", response_model=AppointmentResponse)

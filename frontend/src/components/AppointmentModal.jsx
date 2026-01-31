@@ -1,6 +1,6 @@
 /**
  * Appointment Modal for creating/editing appointments.
- * 
+ *
  * Features:
  * - Form for appointment details
  * - Patient info, date, time, type
@@ -12,13 +12,13 @@ import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { format } from 'date-fns'
 
-export default function AppointmentModal({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  appointment, 
+export default function AppointmentModal({
+  isOpen,
+  onClose,
+  onSave,
+  appointment,
   selectedDate,
-  isLoading 
+  isLoading,
 }) {
   const [patientName, setPatientName] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -31,28 +31,52 @@ export default function AppointmentModal({
   useEffect(() => {
     if (appointment) {
       const patient = appointment.patient || {}
-      setPatientName(appointment.patientName || `${patient.first_name || ''} ${patient.last_name || ''}`.trim())
+      setPatientName(
+        appointment.patientName ||
+          `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+      )
       setPhoneNumber(appointment.phoneNumber || patient.phone || '')
       setDoctor(appointment.doctor || '')
-      setDate(appointment.date ? format(new Date(appointment.date), 'yyyy-MM-dd') : 
-              appointment.scheduled_at ? format(new Date(appointment.scheduled_at), 'yyyy-MM-dd') : '')
-      setTime(appointment.time || (appointment.scheduled_at ? format(new Date(appointment.scheduled_at), 'HH:mm') : ''))
-      setType(appointment.type || appointment.appointment_type || 'Consultation')
+      setDate(
+        appointment.date
+          ? format(new Date(appointment.date), 'yyyy-MM-dd')
+          : appointment.scheduled_at
+            ? format(new Date(appointment.scheduled_at), 'yyyy-MM-dd')
+            : '',
+      )
+      setTime(
+        appointment.time ||
+          (appointment.scheduled_at
+            ? format(new Date(appointment.scheduled_at), 'HH:mm')
+            : ''),
+      )
+      setType(appointment.type || appointment.appointment_type || 'OTHER')
       setNotes(appointment.notes || '')
     } else {
       setPatientName('')
       setPhoneNumber('')
       setDoctor('Dr. Smith')
-      setDate(selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'))
+      setDate(
+        selectedDate
+          ? format(selectedDate, 'yyyy-MM-dd')
+          : format(new Date(), 'yyyy-MM-dd'),
+      )
       setTime('09:00')
-      setType('Consultation')
+      setType('OTHER')
       setNotes('')
     }
   }, [appointment, selectedDate, isOpen])
 
   const handleSubmit = (e) => {
     e.preventDefault()
+
+    // Parse patient name into first and last name
+    const nameParts = patientName.trim().split(/\s+/)
+    const firstName = nameParts[0] || 'Unknown'
+    const lastName = nameParts.slice(1).join(' ') || ''
+
     onSave({
+      // Frontend fields (for display)
       patientName,
       phoneNumber,
       doctor,
@@ -60,9 +84,12 @@ export default function AppointmentModal({
       time,
       type,
       notes,
-      // For backend API
+      // Backend API fields
       scheduled_at: `${date}T${time}:00`,
-      appointment_type: type.toLowerCase(),
+      appointment_type: type.toUpperCase(), // Send uppercase to match database enum
+      patient_name: patientName,
+      patient_phone: phoneNumber,
+      patient_email: '', // Can add email field to form if needed
     })
   }
 
@@ -169,16 +196,14 @@ export default function AppointmentModal({
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="Consultation">Consultation</option>
-              <option value="Follow-up">Follow-up</option>
-              <option value="Check-up">Check-up</option>
-              <option value="Vaccination">Vaccination</option>
-              <option value="Treatment">Treatment</option>
-              <option value="Cardiology">Cardiology</option>
-              <option value="Orthopedics">Orthopedics</option>
-              <option value="Mental Health">Mental Health</option>
-              <option value="Dermatology">Dermatology</option>
-              <option value="Emergency">Emergency</option>
+              <option value="CARDIOLOGY">Cardiology</option>
+              <option value="ORTHOPEDICS">Orthopedics</option>
+              <option value="NEUROLOGY">Neurology</option>
+              <option value="DERMATOLOGY">Dermatology</option>
+              <option value="OPHTHALMOLOGY">Ophthalmology</option>
+              <option value="ENDOCRINOLOGY">Endocrinology</option>
+              <option value="PSYCHIATRY">Psychiatry</option>
+              <option value="OTHER">Other / Consultation</option>
             </select>
           </div>
 
@@ -208,7 +233,11 @@ export default function AppointmentModal({
               disabled={isLoading}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Saving...' : (appointment ? 'Save Changes' : 'Add Appointment')}
+              {isLoading
+                ? 'Saving...'
+                : appointment
+                  ? 'Save Changes'
+                  : 'Add Appointment'}
             </button>
           </div>
         </form>

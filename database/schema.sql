@@ -270,6 +270,31 @@ CREATE INDEX idx_call_logs_referral ON call_logs(referral_id, created_at DESC);
 CREATE INDEX idx_call_logs_status ON call_logs(status);
 
 -- ==========================================================
+-- ALERTS TABLE
+-- ==========================================================
+-- Nurse follow-up alerts for patients requiring attention
+
+CREATE TABLE alerts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  referral_id UUID NOT NULL REFERENCES referrals(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id),  -- Assigned nurse (null = all nurses)
+  alert_type VARCHAR(50) NOT NULL DEFAULT 'GENERAL' CHECK (alert_type IN (
+    'HIGH_RISK_ESCALATION', 'MISSED_APPOINTMENT', 'CALL_FAILED',
+    'FOLLOW_UP_REQUIRED', 'GENERAL'
+  )),
+  message TEXT NOT NULL,
+  is_read BOOLEAN DEFAULT FALSE,
+  is_dismissed BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for alerts
+CREATE INDEX idx_alerts_referral ON alerts(referral_id);
+CREATE INDEX idx_alerts_user ON alerts(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX idx_alerts_type ON alerts(alert_type);
+CREATE INDEX idx_alerts_open ON alerts(is_dismissed, is_read) WHERE is_dismissed = FALSE;
+
+-- ==========================================================
 -- EMAIL LOGS TABLE
 -- ==========================================================
 -- Email tracking for referral-related communications

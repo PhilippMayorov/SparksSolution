@@ -63,9 +63,9 @@ class FlagStatus(str, Enum):
 class PatientBase(BaseModel):
     """Base patient fields."""
     first_name: str = Field(..., min_length=1, max_length=100)
-    last_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(default='', max_length=100)  # Allow empty last name
     email: Optional[EmailStr] = None
-    phone: str = Field(..., pattern=r"^\+?[1-9]\d{1,14}$")  # E.164 format
+    phone: Optional[str] = Field(None, pattern=r"^\+?[1-9]\d{1,14}$")  # E.164 format
     date_of_birth: Optional[datetime] = None
 
 
@@ -97,11 +97,15 @@ class PatientResponse(PatientBase):
 
 class AppointmentBase(BaseModel):
     """Base appointment fields."""
-    patient_id: UUID
+    patient_id: Optional[UUID] = None  # Made optional since patients are embedded in referrals
     scheduled_at: datetime
     duration_minutes: int = Field(default=30, ge=5, le=480)
     appointment_type: str = Field(..., max_length=100)
     notes: Optional[str] = None
+    # Additional fields for new patient creation
+    patient_name: Optional[str] = None
+    patient_phone: Optional[str] = None
+    patient_email: Optional[str] = None
 
 
 class AppointmentCreate(AppointmentBase):

@@ -1,6 +1,6 @@
 /**
  * Calendar Page with all calendar views.
- * 
+ *
  * Features:
  * - Day, Week, Month view switching
  * - Add/Edit appointments via modal
@@ -10,7 +10,14 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays } from 'date-fns'
+import {
+  format,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  addDays,
+} from 'date-fns'
 import MonthCalendar from '../components/MonthCalendar'
 import DayView from '../components/DayView'
 import AppointmentModal from '../components/AppointmentModal'
@@ -45,16 +52,23 @@ export default function CalendarPage() {
   }
 
   const { start, end } = getDateRange()
-  
+
   // Fetch all appointments for the date range
   const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ['appointments', 'range', format(start, 'yyyy-MM-dd'), format(end, 'yyyy-MM-dd')],
+    queryKey: [
+      'appointments',
+      'range',
+      format(start, 'yyyy-MM-dd'),
+      format(end, 'yyyy-MM-dd'),
+    ],
     queryFn: async () => {
       const allAppointments = []
       let currentDate = start
       while (currentDate <= end) {
         try {
-          const dayAppointments = await getAppointmentsByDate(format(currentDate, 'yyyy-MM-dd'))
+          const dayAppointments = await getAppointmentsByDate(
+            format(currentDate, 'yyyy-MM-dd'),
+          )
           allAppointments.push(...dayAppointments)
         } catch (e) {
           // Ignore errors for individual days
@@ -68,19 +82,23 @@ export default function CalendarPage() {
 
   // Create appointment mutation
   const createMutation = useMutation({
-    mutationFn: (data) => createAppointment({
-      patient_id: data.patient_id,
-      scheduled_at: data.scheduled_at,
-      appointment_type: data.appointment_type,
-      notes: data.notes,
-    }),
+    mutationFn: (data) =>
+      createAppointment({
+        patient_id: data.patient_id,
+        scheduled_at: data.scheduled_at,
+        appointment_type: data.appointment_type,
+        notes: data.notes,
+        patient_name: data.patient_name,
+        patient_phone: data.patient_phone,
+        patient_email: data.patient_email,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries(['appointments'])
       setIsModalOpen(false)
     },
   })
 
-  // Update appointment mutation  
+  // Update appointment mutation
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }) => updateAppointment(id, data),
     onSuccess: () => {
@@ -93,7 +111,7 @@ export default function CalendarPage() {
   // Initiate call mutation
   const callMutation = useMutation({
     mutationFn: (appointmentId) => {
-      const apt = appointments.find(a => a.id === appointmentId)
+      const apt = appointments.find((a) => a.id === appointmentId)
       return initiateCall(appointmentId, apt?.patient_id || apt?.patient?.id)
     },
     onSuccess: () => {
@@ -124,7 +142,7 @@ export default function CalendarPage() {
   }
 
   const handleCallManually = (appointmentId) => {
-    const apt = appointments.find(a => a.id === appointmentId)
+    const apt = appointments.find((a) => a.id === appointmentId)
     const phone = apt?.patient?.phone || apt?.phoneNumber
     if (phone) {
       window.open(`tel:${phone}`, '_self')
@@ -183,8 +201,12 @@ export default function CalendarPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Referral Appointments</h1>
-        <p className="text-gray-600 mt-2">Manage and track all patient referral appointments</p>
+        <h1 className="text-3xl font-bold text-gray-900">
+          Referral Appointments
+        </h1>
+        <p className="text-gray-600 mt-2">
+          Manage and track all patient referral appointments
+        </p>
       </div>
 
       {isLoading ? (
@@ -206,7 +228,6 @@ export default function CalendarPage() {
         selectedDate={selectedDate}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
-
       {selectedAppointment && (
         <AppointmentSidePanel
           appointment={selectedAppointment}
