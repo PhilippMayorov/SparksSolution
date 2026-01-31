@@ -219,8 +219,8 @@ CREATE OR REPLACE FUNCTION log_status_change()
 RETURNS TRIGGER AS $$
 BEGIN
   IF OLD.status IS DISTINCT FROM NEW.status THEN
-    INSERT INTO status_history (referral_id, status, changed_by_id, note)
-    VALUES (NEW.id, NEW.status, NEW.created_by_id, 'Status changed to ' || NEW.status);
+    INSERT INTO status_history (referral_id, status, updated_by_id, note)
+    VALUES (NEW.id, NEW.status, NEW.updated_by_id, 'Status changed to ' || NEW.status);
   END IF;
   RETURN NEW;
 END;
