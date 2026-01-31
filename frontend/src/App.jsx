@@ -3,28 +3,35 @@
  *
  * This is the nurse tablet web app for managing patient referrals.
  * Routes:
- * - /login : Authentication
- * - /calendar : Calendar view with appointments
- * - /dashboard : Follow-up dashboard
+ * - / : Dashboard with calendar view
+ * - /referrals/:id : Individual referral details
  * - /flags : List of follow-up flags
- * - /appointments/:id : Individual appointment details
+ * - /login : Authentication (optional)
  */
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
-import CalendarPage from './pages/CalendarPage'
-import DashboardNew from './pages/DashboardNew'
-import AppointmentDetail from './pages/AppointmentDetail'
+import Dashboard from './pages/Dashboard'
+import ReferralDetail from './pages/ReferralDetail'
 import Flags from './pages/Flags'
 import Login from './pages/Login'
 
 function App() {
-  // Check if user is authenticated
-  const isAuthenticated = () => {
-    return localStorage.getItem('isAuthenticated') === 'true' || 
-           localStorage.getItem('auth_token') !== null
-  }
+  // Check for auth token in localStorage
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    () => !!localStorage.getItem('auth_token')
+  )
+
+  // Listen for storage changes (e.g., login/logout in another tab)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setIsAuthenticated(!!localStorage.getItem('auth_token'))
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
 
   return (
     <BrowserRouter>
@@ -39,10 +46,8 @@ function App() {
             isAuthenticated() ? <Layout /> : <Navigate to="/login" replace />
           }
         >
-          <Route index element={<Navigate to="/calendar" replace />} />
-          <Route path="calendar" element={<CalendarPage />} />
-          <Route path="dashboard" element={<DashboardNew />} />
-          <Route path="appointments/:id" element={<AppointmentDetail />} />
+          <Route index element={<Dashboard />} />
+          <Route path="referrals/:id" element={<ReferralDetail />} />
           <Route path="flags" element={<Flags />} />
         </Route>
 
