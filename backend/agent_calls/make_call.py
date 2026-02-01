@@ -16,6 +16,7 @@ from typing import Any, Dict
 import re
 import time
 from dotenv import load_dotenv
+from supabase import create_client, Client
 
 load_dotenv()
 
@@ -37,6 +38,10 @@ TWILIO_PHONE_NUMBER= os.getenv("TWILIO_PHONE_NUMBER")
 
 ELEVENLABS_API_KEY= os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_AGENT_ID= os.getenv("ELEVENLABS_AGENT_ID")
+
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase: Client = create_client(supabase_url, supabase_key)
 
 app = FastAPI()
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
@@ -83,6 +88,36 @@ def incoming_call():
     response.append(connect)
     return Response(content=str(response), media_type="application/xml")
 
+
+
+def update_referral_date(patient_name, new_referral_date):
+    """
+    Update the referral date for a patient by name.
+
+    Args:
+        patient_name: The name of the patient to update
+        new_referral_date: The new referral date in format 'YYYY-MM-DD'
+
+    Returns:
+        dict: Response data with updated record(s) or error message
+    """
+    try:
+        # Update the referral_date for matching patient_name
+        response = supabase.table("referrals").update({
+            "referral_date": new_referral_date
+        }).eq("patient_name", patient_name).execute()
+
+        if response.data and len(response.data) > 0:
+            print(f"Successfully updated referral date for {patient_name} to {new_referral_date}")
+            print(f"Updated {len(response.data)} record(s)")
+            return {"success": True, "data": response.data}
+        else:
+            print(f"No records found for patient name: {patient_name}")
+            return {"success": False, "message": "No matching records found"}
+
+    except Exception as e:
+        print(f"Error updating referral date: {e}")
+        return {"success": False, "error": str(e)}
 
 
 @app.websocket("/media-stream")
@@ -185,27 +220,30 @@ async def media_stream(websocket: WebSocket):
                             }))
 
                         elif t == "agent_response":
-                            # optional: useful debug
                             text = data["agent_response_event"]["agent_response"]
-                            print("🤖:", text)
-                            m = re.search(r"confirmed for (.+?) with the", text, re.IGNORECASE)
+                            print("🤖 raw:", text)
 
-                            if m and call_sid:
-                                selected_time_str = m.group(1).strip()
+                            try:
+                                payload = json.loads(text)
 
-                                # Store it (in-memory)
-                                CALL_CONTEXT.setdefault(call_sid, {})
-                                CALL_CONTEXT[call_sid]["selected_time"] = selected_time_str
+                                # This means the agent returned the final result
+                                if "Rescheduled" in payload and call_sid:
+                                    CALL_CONTEXT.setdefault(call_sid, {})
+                                    CALL_CONTEXT[call_sid]["agent_result"] = payload
 
-                                print("✅ Stored selected_time:", selected_time_str)
+                                    print("Agent returned:", payload)
 
-                                # Trigger hangup AFTER audio finishes (see next section)
-                                hangup_after_audio.set()
+                                    hangup_after_audio.set()
 
-                        else:
-                            # helpful while debugging
-                            # print("ELEVEN other:", data)
-                            pass
+                                if payload.get('Rescheduled') and payload.get('referral_date'):
+                                    date_formatted = payload['referral_date'].replace('/', '-')
+                                    update_referral_date(payload['name'], date_formatted)
+                    
+                            except json.JSONDecodeError:
+                                # Normal spoken text — ignore
+                                pass
+                        
+
 
                 except websockets.exceptions.ConnectionClosed:
                     print("ElevenLabs disconnected")
