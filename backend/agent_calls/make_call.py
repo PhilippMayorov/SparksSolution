@@ -57,6 +57,45 @@ def home():
     return {"status": "ready", "agent": ELEVENLABS_AGENT_ID}
 
 
+def get_scheduled_dates(specialist_type):
+    """
+    Get all scheduled dates for a patient by name.
+
+    Args:
+        patient_name: The name of the patient to search for
+
+    Returns:
+        dict: Response data with list of scheduled dates or error message
+    """
+    try:
+        # Query all referrals matching patient_name and select scheduled_date
+        response = supabase.table("referrals").select(
+            "id, scheduled_date, status"
+        ).eq("specialist_type", specialist_type.upper()).execute()
+
+        if response.data and len(response.data) > 0:
+            # Extract just the scheduled_date values (filter out None values)
+            scheduled_dates = [
+                record["scheduled_date"] 
+                for record in response.data 
+                if record["scheduled_date"] is not None
+            ]
+            
+            print(f"Found {len(response.data)} record(s) for {specialist_type}")
+            print(f"Scheduled dates: {specialist_type}")
+            
+            return scheduled_dates
+        
+        else:
+            print(f"No records found for specialist type: {specialist_type}")
+            return False
+
+    except Exception as e:
+        print(f"Error retrieving scheduled dates: {e}")
+        return {"success": False, "error": str(e)}
+    
+
+
 @app.post("/make-call")
 def make_call(req: CallRequest):
     """Make a call"""
@@ -67,6 +106,10 @@ def make_call(req: CallRequest):
             url=f"{WEBHOOK_BASE_URL}/incoming-call",
             method='POST',
         )
+
+        times = get_scheduled_dates(req.dynamic_variables['specialist_type'])
+        
+        req.dynamic_variables['unavailable_times'] = json.dumps(times)
 
         CALL_CONTEXT[call.sid] = req.dynamic_variables
 
@@ -237,6 +280,8 @@ async def media_stream(websocket: WebSocket):
                                 if payload.get('Rescheduled') and payload.get('scheduled_date'):
                                     date_formatted = payload['scheduled_date']
                                     update_scheduled_date(payload['name'], date_formatted)
+                                else:
+                                    pass
                     
                             except json.JSONDecodeError:
                                 # Normal spoken text — ignore
