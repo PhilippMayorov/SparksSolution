@@ -3,6 +3,7 @@ HACKATHON VERSION - ElevenLabs Agent + Twilio
 WebSocket bridge implementation (CORRECT VERSION)
 """
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Connect
@@ -15,14 +16,18 @@ from pydantic import BaseModel
 from typing import Any, Dict
 import re
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 WEBHOOK_BASE_URL = os.environ["WEBHOOK_BASE_URL"]
 
-# ============================================================================
-# CONFIGURATION - PUT YOUR CREDENTIALS HERE
-# ============================================================================
+TWILIO_ACCOUNT_SID= os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN= os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER= os.getenv("TWILIO_PHONE_NUMBER")
 
-###PASTE API KEYS HERE
+ELEVENLABS_API_KEY= os.getenv("ELEVENLABS_API_KEY")
+ELEVENLABS_AGENT_ID= os.getenv("ELEVENLABS_AGENT_ID")
 
 # ============================================================================
 # APP SETUP
