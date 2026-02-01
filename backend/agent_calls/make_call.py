@@ -24,8 +24,6 @@ load_dotenv()
 # CONFIGURATION - PUT YOUR CREDENTIALS HERE
 # ============================================================================
 
-
-
 # ============================================================================
 # APP SETUP
 # ============================================================================
@@ -51,6 +49,52 @@ class CallRequest(BaseModel):
 @app.get("/")
 def home():
     return {"status": "ready", "agent": ELEVENLABS_AGENT_ID}
+
+def create_flagged_entry(name):
+    """
+    Look up a patient by name in the referrals table, then create
+    a complete entry in the flagged table using that information.
+
+    Args:
+        name: The patient name to look up and flag
+
+    Returns:
+        dict: Response data with created record or error message
+    """
+    try:
+        # First, get the patient's referral information
+        referral_response = supabase.table("referrals").select("*").eq(
+            "patient_name", name
+        ).execute()
+
+        if not referral_response.data or len(referral_response.data) == 0:
+            print(f"No referral found for patient: {name}")
+            return {"success": False, "message": "No referral found for patient"}
+
+        referral = referral_response.data[0]
+
+        # Create a flags entry using the referral's id
+        flags_data = {
+            "referral_id": referral.get("id"),
+            "created_by_id": referral.get("created_by_id"),
+            "title": f"Flagged: {name}",
+            "description": f"Patient {name} has been flagged for follow-up from nurse.",
+            "priority": "medium",
+            "status": "open",
+        }
+
+        response = supabase.table("flags").insert(flags_data).execute()
+
+        if response.data and len(response.data) > 0:
+            print(f"Successfully created flagged entry for {name}")
+            return {"success": True, "data": response.data}
+        else:
+            print(f"Failed to create flagged entry for {name}")
+            return {"success": False, "message": "No record created"}
+
+    except Exception as e:
+        print(f"Error creating flagged entry: {e}")
+        return {"success": False, "error": str(e)}
 
 
 def get_scheduled_dates(specialist_type):
@@ -269,8 +313,12 @@ async def media_stream(websocket: WebSocket):
                             if "Rescheduled" in text:
                                 print("🚫 'Rescheduled' detected - will suppress audio in 7 seconds")
 
+                                payload = {}
+
                                 # Extract data using regex
-                                payload = {"Rescheduled": True}
+                                rescheduled_match = re.search(r'"Rescheduled"\s*:\s*(true|false)', text, re.IGNORECASE)
+                                if rescheduled_match:
+                                    payload["Rescheduled"] = rescheduled_match.group(1).lower() == "true"
 
                                 # Extract name - look for patterns like "name":"Parth Joshi"
                                 name_match = re.search(r'"name"\s*:\s*"([^"]+)"', text)
@@ -286,8 +334,11 @@ async def media_stream(websocket: WebSocket):
                                 CALL_CONTEXT.setdefault(call_sid, {})
                                 CALL_CONTEXT[call_sid]["agent_result"] = payload
 
+
+                                if not payload.get("Rescheduled"):
+                                    create_flagged_entry(payload["name"])
                                 # Update database if we have the necessary data
-                                if payload.get("name") and payload.get("scheduled_date"):
+                                elif payload.get("name") and payload.get("scheduled_date"):
                                     update_scheduled_date(payload["name"], payload["scheduled_date"])
                                     print("✅ Saved data:", payload)
                                 else:
