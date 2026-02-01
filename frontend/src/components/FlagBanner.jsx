@@ -29,26 +29,17 @@ export default function FlagBanner({ flags = [] }) {
     <div
       className={clsx(
         'px-4 py-3 flex items-center justify-between',
-        urgentCount > 0
-          ? 'bg-gradient-to-r from-red-600 to-red-500'
-          : 'bg-gradient-to-r from-amber-500 to-amber-400',
+        urgentCount > 0 ? 'bg-red-600' : 'bg-yellow-500',
       )}
     >
       <div className="flex items-center gap-3">
-        <div
-          className={clsx(
-            'w-8 h-8 rounded-lg flex items-center justify-center',
-            urgentCount > 0 ? 'bg-white/20' : 'bg-white/25',
-          )}
-        >
-          <AlertTriangle className="w-5 h-5 text-white" />
-        </div>
+        <AlertTriangle className="w-5 h-5 text-white" />
         <div className="text-white">
           <span className="font-semibold">
             {flags.length} {flags.length === 1 ? 'flag' : 'flags'} need
             attention
           </span>
-          <span className="ml-2 text-white/80 text-sm">
+          <span className="ml-2 text-white/80">
             {urgentCount > 0 && `${urgentCount} urgent`}
             {urgentCount > 0 && highCount > 0 && ', '}
             {highCount > 0 && `${highCount} high priority`}
@@ -60,10 +51,10 @@ export default function FlagBanner({ flags = [] }) {
         <Link
           to="/flags"
           className={clsx(
-            'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm',
+            'flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-medium transition-colors',
             urgentCount > 0
               ? 'bg-white text-red-600 hover:bg-red-50'
-              : 'bg-white text-amber-600 hover:bg-amber-50',
+              : 'bg-white text-yellow-600 hover:bg-yellow-50',
           )}
         >
           View Flags
@@ -72,7 +63,7 @@ export default function FlagBanner({ flags = [] }) {
 
         <button
           onClick={() => setDismissed(true)}
-          className="p-2 rounded-lg hover:bg-white/20 text-white transition-colors"
+          className="p-1 rounded hover:bg-white/20 text-white transition-colors"
           aria-label="Dismiss banner"
         >
           <X className="w-5 h-5" />
@@ -98,58 +89,43 @@ export function FlagItem({ flag, onResolve, onDismiss }) {
   } = flag
 
   const priorityStyles = {
-    urgent: 'border-l-red-500 bg-gradient-to-r from-red-50 to-white',
-    high: 'border-l-orange-500 bg-gradient-to-r from-orange-50 to-white',
-    medium: 'border-l-amber-500 bg-gradient-to-r from-amber-50 to-white',
-    low: 'border-l-gray-400 bg-gradient-to-r from-gray-50 to-white',
+    urgent: 'border-l-red-500 bg-red-50',
+    high: 'border-l-orange-500 bg-orange-50',
+    medium: 'border-l-yellow-500 bg-yellow-50',
+    low: 'border-l-gray-400 bg-gray-50',
   }
 
   const priorityBadgeStyles = {
-    urgent: 'bg-red-100 text-red-700 border-red-200',
-    high: 'bg-orange-100 text-orange-700 border-orange-200',
-    medium: 'bg-amber-100 text-amber-700 border-amber-200',
-    low: 'bg-gray-100 text-gray-600 border-gray-200',
+    urgent: 'bg-red-100 text-red-800',
+    high: 'bg-orange-100 text-orange-800',
+    medium: 'bg-yellow-100 text-yellow-800',
+    low: 'bg-gray-100 text-gray-800',
   }
 
   return (
     <div
       className={clsx(
-        'p-5 rounded-2xl border-l-4 border border-gray-200 shadow-sm hover:shadow-md transition-all',
+        'p-4 rounded-lg border-l-4 shadow-sm',
         priorityStyles[priority],
       )}
     >
-      <div className="flex justify-between items-start mb-3">
-        <div className="flex items-center gap-3">
-          <div
+      <div className="flex justify-between items-start mb-2">
+        <div className="flex items-center gap-2">
+          <AlertTriangle
             className={clsx(
-              'w-10 h-10 rounded-xl flex items-center justify-center',
+              'w-5 h-5',
               priority === 'urgent'
-                ? 'bg-red-100'
+                ? 'text-red-500'
                 : priority === 'high'
-                  ? 'bg-orange-100'
-                  : priority === 'medium'
-                    ? 'bg-amber-100'
-                    : 'bg-gray-100',
+                  ? 'text-orange-500'
+                  : 'text-yellow-500',
             )}
-          >
-            <AlertTriangle
-              className={clsx(
-                'w-5 h-5',
-                priority === 'urgent'
-                  ? 'text-red-500'
-                  : priority === 'high'
-                    ? 'text-orange-500'
-                    : priority === 'medium'
-                      ? 'text-amber-500'
-                      : 'text-gray-500',
-              )}
-            />
-          </div>
+          />
           <h3 className="font-semibold text-gray-900">{title}</h3>
         </div>
         <span
           className={clsx(
-            'px-3 py-1 rounded-full text-xs font-semibold capitalize border',
+            'px-2 py-1 rounded-full text-xs font-medium capitalize',
             priorityBadgeStyles[priority],
           )}
         >
@@ -158,17 +134,14 @@ export function FlagItem({ flag, onResolve, onDismiss }) {
       </div>
 
       {description && (
-        <p className="text-gray-600 text-sm mb-4 ml-13 pl-13">{description}</p>
+        <p className="text-gray-600 text-sm mb-3">{description}</p>
       )}
 
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">
           {patient && (
             <span className="mr-3">
-              Patient:{' '}
-              <span className="font-medium text-gray-700">
-                {patient.first_name} {patient.last_name}
-              </span>
+              Patient: {patient.first_name} {patient.last_name}
             </span>
           )}
           {created_at && (
@@ -180,13 +153,13 @@ export function FlagItem({ flag, onResolve, onDismiss }) {
           <div className="flex gap-2">
             <button
               onClick={() => onDismiss?.(id)}
-              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
+              className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
             >
               Dismiss
             </button>
             <button
               onClick={() => onResolve?.(id)}
-              className="px-4 py-2 text-sm font-medium bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors shadow-sm"
+              className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
             >
               Resolve
             </button>

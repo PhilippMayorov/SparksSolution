@@ -29,7 +29,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized - redirect to login
+      // TODO: Handle unauthorized - redirect to login
       localStorage.removeItem('auth_token')
       window.location.href = '/login'
     }
@@ -37,76 +37,62 @@ api.interceptors.response.use(
   },
 )
 
-// ============ REFERRALS ============
+// ============ APPOINTMENTS ============
 
 /**
- * Fetch referrals for a specific date.
+ * Fetch appointments for a specific date.
  * @param {string} date - Date in YYYY-MM-DD format
  */
-export const getReferralsByDate = async (date) => {
-  const response = await api.get('/referrals/', { params: { date } })
+export const getAppointmentsByDate = async (date) => {
+  const response = await api.get('/appointments/', { params: { date } })
   return response.data
 }
 
 /**
- * Fetch referrals by status.
- * @param {string} status - Status filter (PENDING, SCHEDULED, MISSED, etc.)
+ * Fetch appointments by status.
+ * @param {string} status - Status filter (scheduled, missed, etc.)
  */
-export const getReferralsByStatus = async (status) => {
-  const response = await api.get('/referrals/', { params: { status } })
+export const getAppointmentsByStatus = async (status) => {
+  const response = await api.get('/appointments/', { params: { status } })
   return response.data
 }
 
 /**
- * Fetch a single referral by ID.
- * @param {string} id - Referral UUID
+ * Fetch a single appointment by ID.
+ * @param {string} id - Appointment UUID
  */
-export const getReferral = async (id) => {
-  const response = await api.get(`/referrals/${id}`)
+export const getAppointment = async (id) => {
+  const response = await api.get(`/appointments/${id}`)
   return response.data
 }
 
 /**
- * Create a new referral.
- * @param {Object} referralData - Referral creation data
+ * Create a new appointment.
+ * @param {Object} appointmentData - Appointment creation data
  */
-export const createReferral = async (referralData) => {
-  const response = await api.post('/referrals/', referralData)
+export const createAppointment = async (appointmentData) => {
+  const response = await api.post('/appointments/', appointmentData)
   return response.data
 }
 
 /**
- * Update an existing referral.
- * @param {string} id - Referral UUID
+ * Update an existing appointment.
+ * @param {string} id - Appointment UUID
  * @param {Object} updates - Fields to update
  */
-export const updateReferral = async (id, updates) => {
-  const response = await api.patch(`/referrals/${id}`, updates)
+export const updateAppointment = async (id, updates) => {
+  const response = await api.patch(`/appointments/${id}`, updates)
   return response.data
 }
 
 /**
- * Schedule a pending referral.
- * @param {string} id - Referral UUID
- * @param {string} scheduledDate - Scheduled datetime (ISO format)
- * @param {string} notes - Optional notes
- */
-export const scheduleReferral = async (id, scheduledDate, notes = null) => {
-  const response = await api.post(`/referrals/${id}/schedule`, {
-    scheduled_date: scheduledDate,
-    notes,
-  })
-  return response.data
-}
-
-/**
- * Reschedule a referral.
- * @param {string} id - Referral UUID
+ * Reschedule an appointment.
+ * @param {string} id - Appointment UUID
  * @param {string} newDatetime - New scheduled datetime (ISO format)
  * @param {string} reason - Optional reason for rescheduling
  */
-export const rescheduleReferral = async (id, newDatetime, reason = null) => {
-  const response = await api.post(`/referrals/${id}/reschedule`, {
+export const rescheduleAppointment = async (id, newDatetime, reason = null) => {
+  const response = await api.post(`/appointments/${id}/reschedule`, {
     new_datetime: newDatetime,
     reason,
   })
@@ -114,66 +100,20 @@ export const rescheduleReferral = async (id, newDatetime, reason = null) => {
 }
 
 /**
- * Mark a referral as missed.
- * @param {string} id - Referral UUID
+ * Mark an appointment as missed.
+ * @param {string} id - Appointment UUID
  */
-export const markReferralMissed = async (id) => {
-  const response = await api.post(`/referrals/${id}/mark-missed`)
+export const markAppointmentMissed = async (id) => {
+  const response = await api.post(`/appointments/${id}/mark-missed`)
   return response.data
 }
 
 /**
- * Mark a referral as attended.
- * @param {string} id - Referral UUID
+ * Cancel an appointment.
+ * @param {string} id - Appointment UUID
  */
-export const markReferralAttended = async (id) => {
-  const response = await api.post(`/referrals/${id}/mark-attended`)
-  return response.data
-}
-
-/**
- * Cancel a referral.
- * @param {string} id - Referral UUID
- */
-export const cancelReferral = async (id) => {
-  await api.delete(`/referrals/${id}`)
-}
-
-/**
- * Get status history for a referral.
- * @param {string} id - Referral UUID
- */
-export const getReferralHistory = async (id) => {
-  const response = await api.get(`/referrals/${id}/history`)
-  return response.data
-}
-
-/**
- * Get communications (calls + emails) for a referral.
- * @param {string} id - Referral UUID
- */
-export const getReferralCommunications = async (id) => {
-  const response = await api.get(`/referrals/${id}/communications`)
-  return response.data
-}
-
-/**
- * Get dashboard statistics.
- */
-export const getDashboardStats = async () => {
-  const response = await api.get('/referrals/dashboard/stats')
-  return response.data
-}
-
-/**
- * Get overdue referrals.
- * @param {number} daysThreshold - Days threshold for overdue (default 14)
- */
-export const getOverdueReferrals = async (daysThreshold = 14) => {
-  const response = await api.get('/referrals/overdue/list', {
-    params: { days_threshold: daysThreshold },
-  })
-  return response.data
+export const cancelAppointment = async (id) => {
+  await api.delete(`/appointments/${id}`)
 }
 
 // ============ FLAGS ============
@@ -188,7 +128,7 @@ export const getOpenFlags = async () => {
 
 /**
  * Fetch flags with optional filters.
- * @param {Object} filters - Filter params (status, priority, referral_id)
+ * @param {Object} filters - Filter params (status, priority, patient_id)
  */
 export const getFlags = async (filters = {}) => {
   const response = await api.get('/flags/', { params: filters })
@@ -229,29 +169,23 @@ export const dismissFlag = async (id, reason = null) => {
 // ============ CALLS ============
 
 /**
- * Initiate an outbound call for a missed referral.
- * @param {string} referralId - Referral UUID
- * @param {string} phoneNumber - Phone number to call
- * @param {string} callType - Type of call (default: MISSED_APPOINTMENT_FOLLOWUP)
+ * Initiate an outbound call for a missed appointment.
+ * @param {string} appointmentId - Appointment UUID
+ * @param {string} patientId - Patient UUID
  */
-export const initiateCall = async (
-  referralId,
-  phoneNumber,
-  callType = 'MISSED_APPOINTMENT_FOLLOWUP',
-) => {
+export const initiateCall = async (appointmentId, patientId) => {
   const response = await api.post('/calls/initiate', {
-    referral_id: referralId,
-    phone_number: phoneNumber,
-    call_type: callType,
+    appointment_id: appointmentId,
+    patient_id: patientId,
   })
   return response.data
 }
 
 /**
- * Get call log details.
- * @param {string} id - Call log UUID
+ * Get call attempt details.
+ * @param {string} id - Call attempt UUID
  */
-export const getCallLog = async (id) => {
+export const getCallAttempt = async (id) => {
   const response = await api.get(`/calls/${id}`)
   return response.data
 }
@@ -260,77 +194,27 @@ export const getCallLog = async (id) => {
  * Get pending calls.
  */
 export const getPendingCalls = async () => {
-  const response = await api.get('/calls/', { params: { status: 'SCHEDULED' } })
-  return response.data
-}
-
-/**
- * Get calls for a specific referral.
- * @param {string} referralId - Referral UUID
- */
-export const getCallsByReferral = async (referralId) => {
-  const response = await api.get('/calls/', { params: { referral_id: referralId } })
-  return response.data
-}
-
-// ============ EMAILS ============
-
-/**
- * Send an email to a patient.
- * @param {Object} emailData - Email data (referral_id, email_type, recipient_email, subject)
- */
-export const sendEmail = async (emailData) => {
-  const response = await api.post('/emails/send', emailData)
-  return response.data
-}
-
-/**
- * Get email logs for a referral.
- * @param {string} referralId - Referral UUID
- */
-export const getEmailLogs = async (referralId) => {
-  const response = await api.get('/emails/', { params: { referral_id: referralId } })
-  return response.data
-}
-
-/**
- * Get a specific email log.
- * @param {string} emailId - Email log UUID
- */
-export const getEmailLog = async (emailId) => {
-  const response = await api.get(`/emails/${emailId}`)
-  return response.data
-}
-
-/**
- * Send bulk emails to multiple referrals.
- * @param {string} emailType - Type of email to send
- * @param {Array<string>} referralIds - Array of referral UUIDs
- */
-export const sendBulkEmails = async (emailType, referralIds) => {
-  const response = await api.post('/emails/send-bulk', referralIds, {
-    params: { email_type: emailType },
-  })
+  const response = await api.get('/calls/', { params: { status: 'pending' } })
   return response.data
 }
 
 // ============ CALENDAR ============
 
 /**
- * Sync a referral to Google Calendar.
- * @param {string} referralId - Referral UUID
+ * Sync an appointment to Google Calendar.
+ * @param {string} appointmentId - Appointment UUID
  */
-export const syncToCalendar = async (referralId) => {
-  const response = await api.post(`/calendar/sync/${referralId}`)
+export const syncToCalendar = async (appointmentId) => {
+  const response = await api.post(`/calendar/sync/${appointmentId}`)
   return response.data
 }
 
 /**
- * Get calendar sync status for a referral.
- * @param {string} referralId - Referral UUID
+ * Get calendar sync status for an appointment.
+ * @param {string} appointmentId - Appointment UUID
  */
-export const getCalendarSyncStatus = async (referralId) => {
-  const response = await api.get(`/calendar/sync-status/${referralId}`)
+export const getCalendarSyncStatus = async (appointmentId) => {
+  const response = await api.get(`/calendar/sync-status/${appointmentId}`)
   return response.data
 }
 

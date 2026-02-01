@@ -12,178 +12,31 @@ body {
     sans-serif;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-gray-100 rounded-full;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
-}
-
 /* React Big Calendar overrides */
 .rbc-calendar {
-  @apply bg-white rounded-xl;
-  font-family: inherit;
+  @apply bg-white rounded-lg shadow-sm;
 }
 
 .rbc-header {
-  @apply py-3 font-semibold text-gray-600 text-sm border-b border-gray-200;
-}
-
-.rbc-header + .rbc-header {
-  @apply border-l border-gray-200;
+  @apply py-3 font-semibold text-gray-700;
 }
 
 .rbc-today {
-  @apply bg-blue-50/50;
-}
-
-.rbc-off-range-bg {
-  @apply bg-gray-50;
+  @apply bg-primary-50;
 }
 
 .rbc-event {
-  @apply bg-blue-500 rounded-lg px-2 py-1 text-sm font-medium border-0 shadow-sm;
+  @apply bg-primary-500 rounded px-2 py-1;
 }
 
-.rbc-event:focus {
-  @apply outline-none ring-2 ring-blue-400 ring-offset-2;
+.rbc-event.missed {
+  @apply bg-danger;
 }
 
-.rbc-event.rbc-selected {
-  @apply bg-blue-600;
+.rbc-event.rescheduled {
+  @apply bg-warning;
 }
 
-.rbc-show-more {
-  @apply text-blue-600 font-medium text-sm hover:text-blue-700;
-}
-
-.rbc-toolbar {
-  @apply mb-4 gap-3;
-}
-
-.rbc-toolbar button {
-  @apply px-4 py-2 text-gray-700 font-medium rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors;
-}
-
-.rbc-toolbar button:active,
-.rbc-toolbar button.rbc-active {
-  @apply bg-blue-600 text-white border-blue-600;
-}
-
-.rbc-toolbar button:focus {
-  @apply outline-none ring-2 ring-blue-400 ring-offset-2;
-}
-
-.rbc-time-view {
-  @apply border border-gray-200 rounded-xl overflow-hidden;
-}
-
-.rbc-time-header {
-  @apply border-b border-gray-200;
-}
-
-.rbc-time-content {
-  @apply border-t-0;
-}
-
-.rbc-timeslot-group {
-  @apply border-b border-gray-100;
-}
-
-.rbc-time-slot {
-  @apply border-t border-gray-50;
-}
-
-.rbc-time-gutter {
-  @apply text-gray-500 text-xs;
-}
-
-.rbc-day-slot .rbc-time-slot {
-  @apply border-t border-gray-100;
-}
-
-.rbc-current-time-indicator {
-  @apply bg-red-500 h-0.5;
-}
-
-.rbc-current-time-indicator::before {
-  content: '';
-  @apply absolute -left-1.5 -top-1 w-3 h-3 rounded-full bg-red-500;
-}
-
-.rbc-month-view {
-  @apply border border-gray-200 rounded-xl overflow-hidden;
-}
-
-.rbc-month-row {
-  @apply border-b border-gray-200;
-}
-
-.rbc-month-row + .rbc-month-row {
-  @apply border-t-0;
-}
-
-.rbc-date-cell {
-  @apply text-right p-2 text-sm;
-}
-
-.rbc-date-cell > a {
-  @apply text-gray-700 hover:text-blue-600;
-}
-
-.rbc-date-cell.rbc-now > a {
-  @apply text-blue-600 font-bold;
-}
-
-.rbc-day-bg + .rbc-day-bg {
-  @apply border-l border-gray-200;
-}
-
-.rbc-agenda-view {
-  @apply border border-gray-200 rounded-xl overflow-hidden;
-}
-
-.rbc-agenda-table {
-  @apply border-0;
-}
-
-.rbc-agenda-date-cell,
-.rbc-agenda-time-cell {
-  @apply whitespace-nowrap py-3 px-4;
-}
-
-.rbc-agenda-event-cell {
-  @apply py-3 px-4;
-}
-
-/* Animation utilities */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.2s ease-out;
-}
-
-/* Focus visible utility */
-.focus-visible-ring:focus-visible {
-  @apply outline-none ring-2 ring-blue-500 ring-offset-2;
+.rbc-event.completed {
+  @apply bg-success;
 }
