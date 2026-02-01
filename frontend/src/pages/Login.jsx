@@ -1,16 +1,13 @@
 /**
  * Login page for nurse authentication.
  *
- * Redesigned to match Figma design with:
- * - Gradient background
- * - Heart icon branding
- * - Clean form design
- * - Demo credentials display
+ * Simple email/password login form.
+ * Stores JWT token in localStorage on success.
  */
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Heart, LogIn } from 'lucide-react'
+import { Calendar, AlertCircle } from 'lucide-react'
 import { login } from '../api/client'
 
 export default function Login() {
@@ -25,105 +22,111 @@ export default function Login() {
     setError('')
     setLoading(true)
 
-    // Demo mode - allow demo credentials
-    if (email === 'nurse@hospital.com' && password === 'nurse123') {
-      localStorage.setItem('isAuthenticated', 'true')
-      localStorage.setItem('auth_token', 'demo-token')
-      localStorage.setItem('nurseName', 'Jessica Williams')
-      // Use a consistent UUID for demo user
-      localStorage.setItem('user_id', '12345678-1234-5678-1234-567812345678')
-      navigate('/')
-      return
-    }
-
-    // Try actual backend login
     try {
-      const data = await login(email, password)
-      localStorage.setItem('isAuthenticated', 'true')
-      localStorage.setItem('nurseName', data.user?.first_name + ' ' + data.user?.last_name || 'Nurse')
-      if (data.user?.id) {
-        localStorage.setItem('user_id', data.user.id)
-      }
+      await login(email, password)
       navigate('/')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid credentials. Try nurse@hospital.com / nurse123')
+      setError(
+        err.response?.data?.detail ||
+          'Login failed. Please check your credentials.',
+      )
     } finally {
       setLoading(false)
     }
   }
 
+  // For demo/development - skip login
+  const handleDemoLogin = () => {
+    localStorage.setItem('auth_token', 'demo-token')
+    navigate('/')
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full">
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
-              <Heart size={32} className="text-white" fill="currentColor" />
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Rural Healthcare Portal</h1>
-            <p className="text-gray-600">Referral Management System</p>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-500 rounded-2xl mb-4">
+            <Calendar className="w-10 h-10 text-white" />
           </div>
+          <h1 className="text-2xl font-bold text-gray-900">Nurse Dashboard</h1>
+          <p className="text-gray-500 mt-1">Appointment Management System</p>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
+        {/* Login form */}
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign In</h2>
 
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="text-sm">{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Email
               </label>
               <input
+                id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="nurse@hospital.com"
+                placeholder="nurse@example.com"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Password
               </label>
               <input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="••••••••"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-2 bg-primary-500 text-white rounded-lg font-medium hover:bg-primary-600 disabled:opacity-50 transition-colors"
             >
-              {loading ? (
-                'Signing in...'
-              ) : (
-                <>
-                  <LogIn size={20} />
-                  Sign In
-                </>
-              )}
+              {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
 
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm text-gray-700 font-medium mb-1">Demo Credentials:</p>
-            <p className="text-sm text-gray-600">Email: nurse@hospital.com</p>
-            <p className="text-sm text-gray-600">Password: nurse123</p>
+          {/* Demo login for development */}
+          <div className="mt-6 pt-6 border-t">
+            <p className="text-sm text-gray-500 text-center mb-3">
+              Development Mode
+            </p>
+            <button
+              onClick={handleDemoLogin}
+              className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+            >
+              Continue as Demo User
+            </button>
           </div>
         </div>
 
-        <p className="text-center text-gray-600 text-sm mt-6">
-          Healthcare Management System © 2026
+        {/* Footer */}
+        <p className="text-center text-sm text-gray-500 mt-6">
+          Nurse Appointment System © 2026
         </p>
       </div>
     </div>

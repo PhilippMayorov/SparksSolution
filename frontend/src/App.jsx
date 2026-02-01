@@ -1,17 +1,24 @@
+/**
+ * Main App component with routing configuration.
+ *
+ * This is the nurse tablet web app for managing patient appointments.
+ * Routes:
+ * - / : Dashboard with calendar view
+ * - /appointments/:id : Individual appointment details
+ * - /flags : List of follow-up flags
+ * - /login : Authentication (optional)
+ */
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
-import CalendarPage from './pages/CalendarPage'
-import DashboardNew from './pages/DashboardNew'
-import ReferralDetail from './pages/ReferralDetail'
+import Dashboard from './pages/Dashboard'
+import AppointmentDetail from './pages/AppointmentDetail'
 import Flags from './pages/Flags'
 import Login from './pages/Login'
 
 function App() {
-  // Check if user is authenticated
-  const isAuthenticated = () => {
-    return localStorage.getItem('isAuthenticated') === 'true' || 
-           localStorage.getItem('auth_token') !== null
-  }
+  // TODO: Implement actual auth check
+  const isAuthenticated = true // Placeholder
 
   return (
     <BrowserRouter>
@@ -23,18 +30,16 @@ function App() {
         <Route
           path="/"
           element={
-            isAuthenticated() ? <Layout /> : <Navigate to="/login" replace />
+            isAuthenticated ? <Layout /> : <Navigate to="/login" replace />
           }
         >
-          <Route index element={<Navigate to="/calendar" replace />} />
-          <Route path="calendar" element={<CalendarPage />} />
-          <Route path="dashboard" element={<DashboardNew />} />
-          <Route path="referrals/:id" element={<ReferralDetail />} />
+          <Route index element={<Dashboard />} />
+          <Route path="appointments/:id" element={<AppointmentDetail />} />
           <Route path="flags" element={<Flags />} />
         </Route>
 
         {/* Catch all */}
-        <Route path="*" element={<Navigate to="/calendar" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )
