@@ -34,11 +34,14 @@ def transform_flag_response(flag_data: dict) -> dict:
     Returns:
         Transformed flag data ready for FlagResponse model
     """
-    # Extract referral data if present
-    referral = flag_data.pop("referrals", None)
+    # Keep referral data for frontend access
+    referral = flag_data.get("referrals", None)
 
+    # Make sure we preserve the referrals object in the response
     if referral:
-        # Parse patient name into first and last name
+        flag_data["referrals"] = referral
+        
+        # Add flattened patient info for backwards compatibility
         patient_name = referral.get("patient_name", "")
         if patient_name:
             parts = patient_name.strip().split(None, 1)
@@ -53,6 +56,9 @@ def transform_flag_response(flag_data: dict) -> dict:
                 "scheduled_date": referral["scheduled_date"],
                 "status": referral.get("status")
             }
+    else:
+        # If no referral data, ensure referrals key exists (for consistency)
+        flag_data["referrals"] = None
 
     return flag_data
 

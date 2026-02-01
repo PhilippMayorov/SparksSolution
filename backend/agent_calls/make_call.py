@@ -3,6 +3,7 @@ HACKATHON VERSION - ElevenLabs Agent + Twilio
 WebSocket bridge implementation (CORRECT VERSION)
 """
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
 from twilio.rest import Client as TwilioClient

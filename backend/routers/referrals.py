@@ -20,9 +20,11 @@ from models.schemas import (
     ReferralStatus,
     SpecialistType,
     DashboardStats,
-    StatusHistoryResponse
+    StatusHistoryResponse,
+    EmailType,
+    EmailStatus
 )
-from services.supabase_client import get_supabase_client
+from services import get_supabase_client, get_email_service
 
 router = APIRouter()
 
@@ -89,10 +91,47 @@ async def create_referral(referral: ReferralCreate):
             referral_data["scheduled_date"] = referral.scheduled_date.isoformat()
 
         print(f"DEBUG: Attempting to create referral with data: {referral_data}")
-        
+
         # Try to create the referral
         created = await db.create_referral(referral_data)
-        
+
+        # Optionally send referral created email to patient
+        if created.get("patient_email"):
+            try:
+                email_service = get_email_service()
+                scheduled_datetime = None
+                if created.get("scheduled_date"):
+                    try:
+                        scheduled_datetime = datetime.fromisoformat(created["scheduled_date"].replace('Z', '+00:00'))
+                    except:
+                        pass
+
+                email_result = await email_service.send_referral_created_email(
+                    to_email=created["patient_email"],
+                    patient_name=created["patient_name"],
+                    specialist_type=created["specialist_type"],
+                    condition=created["condition"],
+                    urgency=created["urgency"],
+                    scheduled_date=scheduled_datetime
+                )
+
+                # Log the email
+                if email_result.get("success"):
+                    email_log_data = {
+                        "referral_id": str(created["id"]),
+                        "email_type": EmailType.REFERRAL_CREATED.value,
+                        "recipient_email": created["patient_email"],
+                        "subject": f"Referral Created - {created['specialist_type']}",
+                        "status": EmailStatus.SENT.value,
+                        "sendgrid_message_id": email_result.get("message_id"),
+                        "calendar_invite_attached": False,
+                        "sent_at": datetime.now().isoformat()
+                    }
+                    await db.create_email_log(email_log_data)
+            except Exception as e:
+                # Don't fail referral creation if email fails
+                print(f"Failed to send referral created email: {e}")
+
         return created
         
     except Exception as e:
@@ -206,8 +245,48 @@ async def schedule_referral(referral_id: UUID, schedule_data: ReferralSchedule):
 
     updated = await db.update_referral(referral_id, updates)
 
-    # TODO: Create Google Calendar event
-    # TODO: Send email confirmation to patient
+    # Send email confirmation to patient
+    if updated.get("patient_email"):
+        try:
+            email_service = get_email_service()
+            # Send email with calendar invite attached
+            email_result = await email_service.send_appointment_confirmed_email(
+                to_email=updated["patient_email"],
+                patient_name=updated["patient_name"],
+                appointment_datetime=schedule_data.scheduled_date,
+                specialist_type=updated["specialist_type"],
+                location=None,  # TODO: Get location from referral or settings
+                attach_calendar=True  # Always attach calendar invite for confirmations
+            )
+
+            # Log the email in database
+            if email_result.get("success"):
+                email_log_data = {
+                    "referral_id": str(referral_id),
+                    "email_type": EmailType.APPOINTMENT_CONFIRMED.value,
+                    "recipient_email": updated["patient_email"],
+                    "subject": f"Appointment Confirmed - {updated['specialist_type']}",
+                    "status": EmailStatus.SENT.value,
+                    "sendgrid_message_id": email_result.get("message_id"),
+                    "calendar_invite_attached": True,  # iCal invite attached
+                    "sent_at": datetime.now().isoformat()
+                }
+                await db.create_email_log(email_log_data)
+            else:
+                # Log failed email
+                email_log_data = {
+                    "referral_id": str(referral_id),
+                    "email_type": EmailType.APPOINTMENT_CONFIRMED.value,
+                    "recipient_email": updated["patient_email"],
+                    "subject": f"Appointment Confirmed - {updated['specialist_type']}",
+                    "status": EmailStatus.FAILED.value,
+                    "error_message": email_result.get("error", "Unknown error"),
+                    "calendar_invite_attached": False
+                }
+                await db.create_email_log(email_log_data)
+        except Exception as e:
+            # Don't fail the whole request if email fails
+            print(f"Failed to send confirmation email: {e}")
 
     return updated
 
@@ -219,8 +298,7 @@ async def reschedule_referral(referral_id: UUID, reschedule: ReferralReschedule)
 
     This endpoint:
     1. Updates the referral scheduled_date in Supabase
-    2. Updates the Google Calendar event (if exists)
-    3. Sends updated invite to patient
+    2. Sends updated invite to patient
 
     Called by:
     - Nurse manually rescheduling
@@ -237,23 +315,50 @@ async def reschedule_referral(referral_id: UUID, reschedule: ReferralReschedule)
         )
 
     # Reschedule in database
+    old_datetime = None
+    if existing.get("scheduled_date"):
+        try:
+            old_datetime = datetime.fromisoformat(existing["scheduled_date"].replace('Z', '+00:00'))
+        except:
+            pass
+
     updated = await db.reschedule_referral(
         referral_id,
         reschedule.new_datetime,
         reschedule.reason
     )
 
-    # TODO: Update Google Calendar event if it exists
-    # if existing.get("calendar_event_id"):
-    #     try:
-    #         calendar = get_calendar_service()
-    #         await calendar.update_appointment_event(
-    #             google_event_id=existing["calendar_event_id"],
-    #             scheduled_at=reschedule.new_datetime,
-    #             send_update=True
-    #         )
-    #     except Exception as e:
-    #         print(f"Failed to update calendar event: {e}")
+    # Send rescheduled email notification
+    if updated.get("patient_email"):
+        try:
+            email_service = get_email_service()
+            # Send email with updated calendar invite
+            email_result = await email_service.send_appointment_rescheduled_email(
+                to_email=updated["patient_email"],
+                patient_name=updated["patient_name"],
+                new_datetime=reschedule.new_datetime,
+                specialist_type=updated["specialist_type"],
+                old_datetime=old_datetime,
+                location=None,  # TODO: Get location from referral or settings
+                reason=reschedule.reason,
+                attach_calendar=True  # Always attach updated calendar invite for reschedules
+            )
+
+            # Log the email
+            if email_result.get("success"):
+                email_log_data = {
+                    "referral_id": str(referral_id),
+                    "email_type": EmailType.APPOINTMENT_RESCHEDULED.value,
+                    "recipient_email": updated["patient_email"],
+                    "subject": f"Appointment Rescheduled - {updated['specialist_type']}",
+                    "status": EmailStatus.SENT.value,
+                    "sendgrid_message_id": email_result.get("message_id"),
+                    "calendar_invite_attached": True,  # Updated iCal invite attached
+                    "sent_at": datetime.now().isoformat()
+                }
+                await db.create_email_log(email_log_data)
+        except Exception as e:
+            print(f"Failed to send reschedule email: {e}")
 
     return updated
 
@@ -318,7 +423,7 @@ async def cancel_referral(referral_id: UUID):
     """
     Cancel a referral.
 
-    Updates status to cancelled and removes Google Calendar event.
+    Updates status to cancelled.
     """
     db = get_supabase_client()
 
@@ -331,14 +436,6 @@ async def cancel_referral(referral_id: UUID):
 
     # Update status to cancelled
     await db.cancel_referral(referral_id)
-
-    # TODO: Cancel Google Calendar event
-    # if existing.get("calendar_event_id"):
-    #     try:
-    #         calendar = get_calendar_service()
-    #         await calendar.cancel_event(existing["calendar_event_id"])
-    #     except Exception as e:
-    #         print(f"Failed to cancel calendar event: {e}")
 
     return None
 

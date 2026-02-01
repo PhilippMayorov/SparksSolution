@@ -331,6 +331,47 @@ export const getCallsByReferral = async (referralId) => {
   return response.data
 }
 
+// ============ EMAILS ============
+
+/**
+ * Send an email to a patient.
+ * @param {Object} emailData - Email data (referral_id, email_type, recipient_email, subject)
+ */
+export const sendEmail = async (emailData) => {
+  const response = await api.post('/emails/send', emailData)
+  return response.data
+}
+
+/**
+ * Get email logs for a referral.
+ * @param {string} referralId - Referral UUID
+ */
+export const getEmailLogs = async (referralId) => {
+  const response = await api.get('/emails/', { params: { referral_id: referralId } })
+  return response.data
+}
+
+/**
+ * Get a specific email log.
+ * @param {string} emailId - Email log UUID
+ */
+export const getEmailLog = async (emailId) => {
+  const response = await api.get(`/emails/${emailId}`)
+  return response.data
+}
+
+/**
+ * Send bulk emails to multiple referrals.
+ * @param {string} emailType - Type of email to send
+ * @param {Array<string>} referralIds - Array of referral UUIDs
+ */
+export const sendBulkEmails = async (emailType, referralIds) => {
+  const response = await api.post('/emails/send-bulk', referralIds, {
+    params: { email_type: emailType },
+  })
+  return response.data
+}
+
 // ============ CALENDAR ============
 
 /**

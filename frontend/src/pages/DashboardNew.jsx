@@ -168,8 +168,10 @@ export default function Dashboard() {
               <div className="text-center py-8 text-gray-500">No flagged patients at this time</div>
             ) : (
               flaggedPatients.map(flag => {
-                const patientName = `${flag.patient_first_name || ''} ${flag.patient_last_name || ''}`.trim() || 'Unknown Patient'
-                const phone = flag.patient_phone || 'No phone'
+                // Get patient name from the referral data in the flag
+                const patientName = flag.referrals?.patient_name || 'Unknown Patient'
+                const phone = flag.referrals?.patient_phone || 'No phone'
+                const scheduledDate = flag.referrals?.scheduled_date
                 
                 return (
                   <div key={flag.id} className="bg-white rounded-lg border-2 border-red-200 p-6 shadow-sm">
@@ -183,23 +185,23 @@ export default function Dashboard() {
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
                           <div>
-                            <span className="font-medium">Reason:</span> {flag.reason || 'No answer / Multiple attempts'}
+                            <span className="font-medium">Title:</span> {flag.title || 'Follow-up required'}
                           </div>
                           <div>
                             <span className="font-medium">Phone:</span> {phone}
                           </div>
                           <div>
-                            <span className="font-medium">Type:</span> {flag.flag_type || 'Follow-up required'}
+                            <span className="font-medium">Description:</span> {flag.description || 'Patient needs attention'}
                           </div>
                           <div>
-                            <span className="font-medium">Call Attempts:</span> {flag.call_attempts || 3}
+                            <span className="font-medium">Status:</span> {flag.status || 'open'}
                           </div>
                         </div>
                       </div>
                     </div>
                     <div className="flex gap-3 mt-4">
                       <button
-                        onClick={() => handleCallPatient({ patient })}
+                        onClick={() => handleCallPatient(flag.referrals)}
                         className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
                       >
                         <Phone size={18} />
@@ -237,7 +239,7 @@ export default function Dashboard() {
               <div className="text-center py-8 text-gray-500">No missed appointments requiring follow-up</div>
             ) : (
               missedReferrals.slice(0, 3).map(ref => {
-                const patientName = `${ref.patient_first_name || ''} ${ref.patient_last_name || ''}`.trim() || 'Unknown Patient'
+                const patientName = ref.patient_name || 'Unknown Patient'
                 
                 return (
                   <div key={ref.id} className="bg-orange-50 rounded-lg border border-orange-200 p-6">
@@ -304,7 +306,7 @@ export default function Dashboard() {
                   </tr>
                 ) : (
                   upcomingReferrals.slice(0, 10).map(ref => {
-                    const patientName = `${ref.patient_first_name || ''} ${ref.patient_last_name || ''}`.trim() || 'Unknown Patient'
+                    const patientName = ref.patient_name || 'Unknown Patient'
                     const phone = ref.patient_phone || ''
                     const daysUntil = ref.scheduled_date ? differenceInDays(new Date(ref.scheduled_date), new Date()) : 0
                     

@@ -186,11 +186,9 @@ class ReferralResponse(ReferralBase):
     status: ReferralStatus
     completed_date: Optional[datetime] = None
 
-    # Email & Calendar tracking
+    # Email tracking
     email_sent: bool = False
     email_sent_at: Optional[datetime] = None
-    calendar_invite_sent: bool = False
-    calendar_event_id: Optional[str] = None
 
     # Audit fields
     created_by_id: UUID
@@ -350,6 +348,20 @@ class AppointmentInfo(BaseModel):
     status: Optional[str] = None
 
 
+class ReferralInfo(BaseModel):
+    """Referral info embedded in flag response."""
+    id: Optional[UUID] = None
+    patient_name: Optional[str] = None
+    patient_dob: Optional[str] = None
+    patient_phone: Optional[str] = None
+    patient_email: Optional[str] = None
+    scheduled_date: Optional[datetime] = None
+    status: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class FlagResponse(FlagBase):
     """Schema for flag responses."""
     id: UUID
@@ -362,6 +374,7 @@ class FlagResponse(FlagBase):
     updated_at: datetime
     patient: Optional[PatientInfo] = None
     appointment: Optional[AppointmentInfo] = None
+    referrals: Optional[ReferralInfo] = None
 
     class Config:
         from_attributes = True

@@ -23,7 +23,7 @@ from models.schemas import (
     CallResolution,
     FlagPriority
 )
-from services import get_supabase_client, get_elevenlabs_service, get_calendar_service
+from services import get_supabase_client, get_elevenlabs_service
 
 router = APIRouter()
 
@@ -173,10 +173,8 @@ async def handle_successful_reschedule(
     Handle successful rescheduling by AI agent.
 
     1. Update referral in Supabase
-    2. Update/create Google Calendar event
     """
     db = get_supabase_client()
-    calendar = get_calendar_service()
 
     # Update referral
     referral = await db.reschedule_referral(
@@ -189,39 +187,7 @@ async def handle_successful_reschedule(
         print(f"Failed to reschedule referral {referral_id}")
         return
 
-    # Get patient details from referral
-    patient_name = referral.get("patient_name", "Patient")
-    patient_email = referral.get("patient_email")
-    specialist_type = referral.get("specialist_type", "Specialist")
-
-    # Update or create calendar event
-    try:
-        if referral.get("calendar_event_id"):
-            await calendar.update_referral_event(
-                google_event_id=referral["calendar_event_id"],
-                scheduled_at=new_datetime,
-                patient_name=patient_name,
-                send_update=True
-            )
-        else:
-            result = await calendar.create_referral_event(
-                referral_id=referral_id,
-                patient_name=patient_name,
-                patient_email=patient_email,
-                specialist_type=specialist_type,
-                scheduled_at=new_datetime,
-                send_invite=True
-            )
-            # Save Google event ID
-            await db.update_referral(
-                referral_id,
-                {"calendar_event_id": result["google_event_id"]}
-            )
-
-        print(f"Successfully rescheduled referral {referral_id} to {new_datetime}")
-
-    except Exception as e:
-        print(f"Failed to sync calendar for referral {referral_id}: {e}")
+    print(f"Successfully rescheduled referral {referral_id} to {new_datetime}")
 
 
 async def create_follow_up_flag(
