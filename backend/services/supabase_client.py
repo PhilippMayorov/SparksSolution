@@ -611,6 +611,8 @@ class SupabaseClient:
             return result.data or []
         except Exception as e:
             print(f"Error getting flags: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     async def get_open_flags(self) -> List[dict]:

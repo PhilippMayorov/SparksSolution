@@ -11,7 +11,7 @@ This backend handles:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import auth, referrals, calls, flags, calendar, webhooks
+from routers import auth, referrals, calls, flags, calendar, webhooks, emails
 
 app = FastAPI(
     title="Nurse Referral Management API",
@@ -35,6 +35,7 @@ app.include_router(calls.router, prefix="/api/calls", tags=["Calls"])
 app.include_router(flags.router, prefix="/api/flags", tags=["Flags"])
 app.include_router(calendar.router, prefix="/api/calendar", tags=["Calendar"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
+app.include_router(emails.router, prefix="/api/emails", tags=["Emails"])
 
 
 @app.get("/")
@@ -53,7 +54,7 @@ async def health_check():
         "services": {
             "supabase": "unknown",
             "elevenlabs": "configured",
-            "google_calendar": "configured"
+            "email": "configured"
         }
     }
     

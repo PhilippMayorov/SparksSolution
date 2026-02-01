@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appointment Rescheduled</title>
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .email-header {
+            background-color: #f59e0b;
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .email-header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .email-body {
+            padding: 30px 20px;
+        }
+        .email-body h2 {
+            color: #1f2937;
+            font-size: 20px;
+            margin-top: 0;
+        }
+        .email-body p {
+            margin: 15px 0;
+            color: #4b5563;
+        }
+        .info-box {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .info-box strong {
+            color: #1f2937;
+        }
+        .email-footer {
+            background-color: #f9fafb;
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+        }
+        .email-footer p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>Appointment Rescheduled</h1>
+        </div>
+        <div class="email-body">
+            <h2>Your Appointment Has Been Rescheduled</h2>
+            <p>Dear {{ patient_name }},</p>
+            <p>Your specialist appointment has been rescheduled to a new date and time.</p>
+
+            {% if old_datetime %}
+            <div class="info-box">
+                <p><strong>Previous Appointment:</strong></p>
+                <p>{{ old_datetime }}</p>
+            </div>
+            {% endif %}
+
+            <div class="info-box">
+                <p><strong>New Appointment Details:</strong></p>
+                <p><strong>Date & Time:</strong> {{ new_datetime }}</p>
+                <p><strong>Specialist:</strong> {{ specialist_type }}</p>
+                {% if location %}
+                <p><strong>Location:</strong> {{ location }}</p>
+                {% endif %}
+            </div>
+
+            {% if reason %}
+            <p><strong>Reason for rescheduling:</strong> {{ reason }}</p>
+            {% endif %}
+
+            <p>We apologize for any inconvenience this may cause. If this new time does not work for you, please contact us to find an alternative.</p>
+
+            <p>Best regards,<br>{{ clinic_name }}</p>
+        </div>
+        <div class="email-footer">
+            <p>This is an automated message from {{ clinic_name }}</p>
+            <p>If you have any questions, please contact us at {{ contact_email }}</p>
+            <p>&copy; 2026 {{ clinic_name }}. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

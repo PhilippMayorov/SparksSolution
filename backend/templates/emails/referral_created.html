@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Referral Created</title>
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .email-header {
+            background-color: #2563eb;
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .email-header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .email-body {
+            padding: 30px 20px;
+        }
+        .email-body h2 {
+            color: #1f2937;
+            font-size: 20px;
+            margin-top: 0;
+        }
+        .email-body p {
+            margin: 15px 0;
+            color: #4b5563;
+        }
+        .info-box {
+            background-color: #f3f4f6;
+            border-left: 4px solid #2563eb;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .info-box strong {
+            color: #1f2937;
+        }
+        .email-footer {
+            background-color: #f9fafb;
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+        }
+        .email-footer p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>{{ clinic_name }}</h1>
+        </div>
+        <div class="email-body">
+            <h2>Specialist Referral Created</h2>
+            <p>Dear {{ patient_name }},</p>
+            <p>A referral has been created for you to see a specialist. We are working on scheduling your appointment.</p>
+
+            <div class="info-box">
+                <p><strong>Referral Details:</strong></p>
+                <p><strong>Specialist Type:</strong> {{ specialist_type }}</p>
+                <p><strong>Condition:</strong> {{ condition }}</p>
+                <p><strong>Urgency:</strong> {{ urgency }}</p>
+                {% if scheduled_date %}
+                <p><strong>Scheduled Date:</strong> {{ scheduled_date }}</p>
+                {% endif %}
+            </div>
+
+            <p>You will receive another email once your appointment has been scheduled. If you have any questions or concerns, please contact us.</p>
+
+            <p>Best regards,<br>{{ clinic_name }}</p>
+        </div>
+        <div class="email-footer">
+            <p>This is an automated message from {{ clinic_name }}</p>
+            <p>If you have any questions, please contact us at {{ contact_email }}</p>
+            <p>&copy; 2026 {{ clinic_name }}. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
