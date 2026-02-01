@@ -1,14 +1,14 @@
 """
 ElevenLabs Conversational AI service.
 
-Handles outbound calling via ElevenLabs API for automated appointment rescheduling.
-The agent calls patients who have missed appointments and attempts to reschedule.
+Handles outbound calling via ElevenLabs API for automated referral rescheduling.
+The agent calls patients who have missed referral appointments and attempts to reschedule.
 
 Flow:
 1. Backend triggers call via initiate_outbound_call()
 2. ElevenLabs agent converses with patient
 3. On completion, ElevenLabs sends webhook to our /api/webhooks/elevenlabs endpoint
-4. Webhook handler processes outcome and updates appointment status
+4. Webhook handler processes outcome and updates referral status
 """
 
 import os
@@ -25,8 +25,8 @@ load_dotenv()
 class ElevenLabsService:
     """
     ElevenLabs Conversational AI integration service.
-    
-    Uses ElevenLabs API to initiate outbound calls for appointment rescheduling.
+
+    Uses ElevenLabs API to initiate outbound calls for referral rescheduling.
     The agent is pre-configured in ElevenLabs dashboard with appropriate prompts.
     """
     
@@ -53,35 +53,35 @@ class ElevenLabsService:
         self,
         phone_number: str,
         patient_name: str,
-        appointment_id: UUID,
-        appointment_type: str,
+        referral_id: UUID,
+        specialist_type: str,
         original_datetime: datetime,
-        call_attempt_id: UUID
+        call_log_id: UUID
     ) -> dict:
         """
-        Initiate an outbound call to reschedule a missed appointment.
-        
+        Initiate an outbound call to reschedule a missed referral.
+
         Args:
             phone_number: Patient's phone number in E.164 format (+1234567890)
             patient_name: Patient's name for personalized greeting
-            appointment_id: ID of the missed appointment
-            appointment_type: Type of appointment (e.g., "follow-up", "check-up")
+            referral_id: ID of the missed referral
+            specialist_type: Type of specialist (e.g., "CARDIOLOGY", "ORTHOPEDICS")
             original_datetime: Original scheduled datetime
-            call_attempt_id: Our internal call attempt ID for tracking
-            
+            call_log_id: Our internal call log ID for tracking
+
         Returns:
             dict with call_id and status from ElevenLabs
-            
+
         Raises:
             httpx.HTTPError: If API call fails
-            
-        NOTE: The actual ElevenLabs API endpoint and payload structure 
+
+        NOTE: The actual ElevenLabs API endpoint and payload structure
         should be verified against their documentation. This is a placeholder
         based on typical conversational AI patterns.
         """
         # TODO: Verify actual ElevenLabs outbound calling API endpoint
         # This is a placeholder structure - adjust based on actual API docs
-        
+
         payload = {
             "agent_id": self.agent_id,
             "phone_number": phone_number,
@@ -89,15 +89,15 @@ class ElevenLabsService:
             # Dynamic variables passed to the agent's prompt
             "dynamic_variables": {
                 "patient_name": patient_name,
-                "appointment_type": appointment_type,
+                "specialist_type": specialist_type,
                 "original_date": original_datetime.strftime("%A, %B %d"),
                 "original_time": original_datetime.strftime("%I:%M %p"),
             },
             # Metadata returned in webhook for our tracking
             "metadata": {
-                "appointment_id": str(appointment_id),
-                "call_attempt_id": str(call_attempt_id),
-                "source": "nurse_appointment_system"
+                "referral_id": str(referral_id),
+                "call_log_id": str(call_log_id),
+                "source": "nurse_referral_system"
             }
         }
         

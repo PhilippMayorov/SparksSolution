@@ -20,10 +20,10 @@ from models.schemas import (
     ElevenLabsWebhookPayload,
     WebhookResponse,
     CallStatus,
-    CallOutcome,
+    CallResolution,
     FlagPriority
 )
-from services import get_supabase_client, get_elevenlabs_service, get_calendar_service
+from services import get_supabase_client, get_elevenlabs_service
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ async def handle_elevenlabs_webhook(
     2. Parse payload and find our call attempt record
     3. Update call attempt with outcome
     4. Based on outcome:
-       - SUCCESS (rescheduled): Update appointment + sync calendar
+       - SUCCESS (rescheduled): Update referral + sync calendar
        - FAILURE (declined/no-answer): Create nurse follow-up flag
     
     IMPORTANT: This endpoint should respond quickly.
@@ -57,8 +57,8 @@ async def handle_elevenlabs_webhook(
         "transcript": "...",
         "duration_seconds": 120,
         "metadata": {
-            "appointment_id": "our-appointment-uuid",
-            "call_attempt_id": "our-call-attempt-uuid"
+            "referral_id": "our-referral-uuid",
+            "call_log_id": "our-call-log-uuid"
         }
     }
     """
@@ -83,19 +83,25 @@ async def handle_elevenlabs_webhook(
             detail=f"Invalid payload: {str(e)}"
         )
     
-    # Find our call attempt record
+    # Find our call log record (we'll use twilio_call_sid for now as we don't have elevenlabs_id)
+    # Note: This assumes ElevenLabs call_id maps to our internal tracking
     db = get_supabase_client()
-    call_attempt = await db.get_call_by_elevenlabs_id(payload.call_id)
-    
-    if not call_attempt:
-        # Log but don't fail - might be a duplicate or test
-        print(f"Unknown ElevenLabs call_id: {payload.call_id}")
-        return WebhookResponse(success=True, message="Call not found, ignoring")
-    
+    # For now, use the metadata to find the call_log
+    call_log_id = payload.metadata.get("call_log_id") if payload.metadata else None
+
+    if not call_log_id:
+        print(f"Missing call_log_id in ElevenLabs webhook metadata")
+        return WebhookResponse(success=True, message="Call log ID not found, ignoring")
+
+    call_log = await db.get_call_log(call_log_id)
+    if not call_log:
+        print(f"Unknown call_log_id: {call_log_id}")
+        return WebhookResponse(success=True, message="Call log not found, ignoring")
+
     # Schedule background processing
     background_tasks.add_task(
         process_call_outcome,
-        call_attempt=call_attempt,
+        call_log=call_log,
         payload=payload
     )
     
@@ -103,13 +109,13 @@ async def handle_elevenlabs_webhook(
     return WebhookResponse(success=True, message="Webhook received, processing")
 
 
-async def process_call_outcome(call_attempt: dict, payload: ElevenLabsWebhookPayload):
+async def process_call_outcome(call_log: dict, payload: ElevenLabsWebhookPayload):
     """
     Background task to process call outcome.
-    
+
     Handles:
-    - Updating call attempt record
-    - Rescheduling appointment (if successful)
+    - Updating call log record
+    - Rescheduling referral (if successful)
     - Creating follow-up flag (if failed)
     - Syncing to Google Calendar (if rescheduled)
     """
@@ -122,119 +128,81 @@ async def process_call_outcome(call_attempt: dict, payload: ElevenLabsWebhookPay
         "no_answer": CallStatus.NO_ANSWER.value
     }
     
-    outcome_map = {
-        "rescheduled": CallOutcome.RESCHEDULED.value,
-        "declined": CallOutcome.DECLINED.value,
-        "voicemail": CallOutcome.VOICEMAIL.value,
-        "callback_requested": CallOutcome.CALLBACK_REQUESTED.value,
-        "invalid_number": CallOutcome.INVALID_NUMBER.value
+    resolution_map = {
+        "rescheduled": CallResolution.RESCHEDULED.value,
+        "declined": CallResolution.DECLINED.value,
+        "voicemail": CallResolution.LEFT_VOICEMAIL.value,
+        "callback_requested": CallResolution.CALLBACK_REQUESTED.value,
+        "no_answer": CallResolution.NO_ANSWER.value
     }
-    
-    # Update call attempt record
+
+    # Update call log record
     call_update = {
         "status": status_map.get(payload.status, CallStatus.COMPLETED.value),
-        "outcome": outcome_map.get(payload.outcome) if payload.outcome else None,
-        "ended_at": datetime.utcnow().isoformat(),
-        "transcript": payload.transcript
+        "resolution": resolution_map.get(payload.outcome) if payload.outcome else None,
+        "completed_at": datetime.utcnow().isoformat(),
+        "transcript": payload.transcript,
+        "duration_seconds": payload.duration_seconds
     }
-    
-    await db.update_call_attempt(call_attempt["id"], call_update)
-    
-    appointment_id = call_attempt["appointment_id"]
-    patient_id = call_attempt["patient_id"]
+
+    await db.update_call_log(call_log["id"], call_update)
+
+    referral_id = call_log["referral_id"]
     
     # Handle based on outcome
     if payload.outcome == "rescheduled" and payload.new_appointment_time:
         # SUCCESS: Patient agreed to reschedule
         await handle_successful_reschedule(
-            appointment_id=appointment_id,
-            new_datetime=payload.new_appointment_time,
-            patient_id=patient_id
+            referral_id=referral_id,
+            new_datetime=payload.new_appointment_time
         )
     else:
         # FAILURE: Need nurse follow-up
         await create_follow_up_flag(
-            appointment_id=appointment_id,
-            patient_id=patient_id,
+            referral_id=referral_id,
             call_outcome=payload.outcome or payload.status,
             transcript=payload.transcript
         )
 
 
 async def handle_successful_reschedule(
-    appointment_id: str,
-    new_datetime: datetime,
-    patient_id: str
+    referral_id: str,
+    new_datetime: datetime
 ):
     """
     Handle successful rescheduling by AI agent.
-    
-    1. Update appointment in Supabase
-    2. Update/create Google Calendar event
+
+    1. Update referral in Supabase
     """
     db = get_supabase_client()
-    calendar = get_calendar_service()
-    
-    # Update appointment
-    appointment = await db.reschedule_appointment(
-        appointment_id,
+
+    # Update referral
+    referral = await db.reschedule_referral(
+        referral_id,
         new_datetime,
         reason="Rescheduled via automated call"
     )
-    
-    if not appointment:
-        print(f"Failed to reschedule appointment {appointment_id}")
+
+    if not referral:
+        print(f"Failed to reschedule referral {referral_id}")
         return
-    
-    # Get patient details for calendar
-    patient = await db.get_patient(patient_id)
-    patient_name = f"{patient['first_name']} {patient['last_name']}"
-    
-    # Update or create calendar event
-    try:
-        if appointment.get("google_event_id"):
-            await calendar.update_appointment_event(
-                google_event_id=appointment["google_event_id"],
-                scheduled_at=new_datetime,
-                patient_name=patient_name,
-                send_update=True
-            )
-        else:
-            result = await calendar.create_appointment_event(
-                appointment_id=appointment_id,
-                patient_name=patient_name,
-                patient_email=patient.get("email"),
-                appointment_type=appointment.get("appointment_type", "Appointment"),
-                scheduled_at=new_datetime,
-                duration_minutes=appointment.get("duration_minutes", 30),
-                send_invite=True
-            )
-            # Save Google event ID
-            await db.update_appointment(
-                appointment_id,
-                {"google_event_id": result["google_event_id"]}
-            )
-        
-        print(f"Successfully rescheduled appointment {appointment_id} to {new_datetime}")
-        
-    except Exception as e:
-        print(f"Failed to sync calendar for appointment {appointment_id}: {e}")
+
+    print(f"Successfully rescheduled referral {referral_id} to {new_datetime}")
 
 
 async def create_follow_up_flag(
-    appointment_id: str,
-    patient_id: str,
+    referral_id: str,
     call_outcome: str,
     transcript: Optional[str] = None
 ):
     """
     Create a nurse follow-up flag after failed reschedule attempt.
-    
+
     The nurse will see this flag on their dashboard and can
     manually follow up with the patient.
     """
     db = get_supabase_client()
-    
+
     # Determine priority based on outcome
     priority_map = {
         "declined": FlagPriority.HIGH.value,
@@ -244,27 +212,26 @@ async def create_follow_up_flag(
         "invalid_number": FlagPriority.URGENT.value,
         "failed": FlagPriority.HIGH.value
     }
-    
+
     # Build description
     description_parts = [
         f"Automated call outcome: {call_outcome}",
-        "Patient needs manual follow-up to reschedule missed appointment."
+        "Patient needs manual follow-up to reschedule missed referral."
     ]
-    
+
     if transcript:
         description_parts.append(f"\nCall transcript:\n{transcript[:500]}...")
-    
+
     flag_data = {
-        "patient_id": patient_id,
-        "appointment_id": appointment_id,
+        "referral_id": referral_id,
         "title": f"Follow-up needed: {call_outcome.replace('_', ' ').title()}",
         "description": "\n".join(description_parts),
         "priority": priority_map.get(call_outcome, FlagPriority.MEDIUM.value),
-        "status": "open"
+        "status": "OPEN"
     }
-    
+
     await db.create_flag(flag_data)
-    print(f"Created follow-up flag for patient {patient_id}, appointment {appointment_id}")
+    print(f"Created follow-up flag for referral {referral_id}")
 
 
 # Optional: Health check endpoint for webhook URL validation

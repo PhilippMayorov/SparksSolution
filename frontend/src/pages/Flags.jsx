@@ -9,7 +9,14 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle, Filter, RefreshCw } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle,
+  Filter,
+  RefreshCw,
+  Search,
+  X,
+} from 'lucide-react'
 import { useState } from 'react'
 import { FlagItem } from '../components/FlagBanner'
 import { getFlags, getOpenFlags, resolveFlag, dismissFlag } from '../api/client'
@@ -84,10 +91,10 @@ export default function Flags() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Follow-up Flags</h1>
-          <p className="text-gray-500">
+          <p className="text-gray-500 mt-1">
             {filteredFlags.length} {filter === 'open' ? 'open' : ''} flags
             requiring attention
           </p>
@@ -95,7 +102,7 @@ export default function Flags() {
 
         <button
           onClick={() => refetch()}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 font-medium shadow-sm"
         >
           <RefreshCw className="w-4 h-4" />
           Refresh
@@ -103,74 +110,99 @@ export default function Flags() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-4 p-4 bg-white rounded-lg border">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">Filters:</span>
-        </div>
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center">
+              <Filter className="w-4 h-4 text-gray-500" />
+            </div>
+            <span className="text-sm font-semibold text-gray-700">
+              Filters:
+            </span>
+          </div>
 
-        {/* Status filter */}
-        <div className="flex gap-1">
-          {['open', 'resolved', 'all'].map((status) => (
-            <button
-              key={status}
-              onClick={() => setFilter(status)}
-              className={`
-                px-3 py-1 rounded-lg text-sm font-medium transition-colors
-                ${
-                  filter === status
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }
-              `}
-            >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-            </button>
-          ))}
-        </div>
+          {/* Status filter */}
+          <div className="flex bg-gray-100 rounded-xl p-1">
+            {['open', 'resolved', 'all'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilter(status)}
+                className={`
+                  px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize
+                  ${
+                    filter === status
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-white hover:shadow-sm'
+                  }
+                `}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
 
-        {/* Priority filter */}
-        <div className="flex gap-1 border-l pl-4">
-          {['all', 'urgent', 'high', 'medium', 'low'].map((priority) => (
+          {/* Priority filter */}
+          <div className="flex gap-2 sm:border-l sm:pl-4 border-gray-200">
+            {['all', 'urgent', 'high', 'medium', 'low'].map((priority) => (
+              <button
+                key={priority}
+                onClick={() => setPriorityFilter(priority)}
+                className={`
+                  px-3 py-2 rounded-xl text-sm font-medium transition-all capitalize border
+                  ${
+                    priorityFilter === priority
+                      ? priority === 'urgent'
+                        ? 'bg-red-100 text-red-700 border-red-200'
+                        : priority === 'high'
+                          ? 'bg-orange-100 text-orange-700 border-orange-200'
+                          : priority === 'medium'
+                            ? 'bg-amber-100 text-amber-700 border-amber-200'
+                            : 'bg-blue-100 text-blue-700 border-blue-200'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }
+                `}
+              >
+                {priority}
+              </button>
+            ))}
+          </div>
+
+          {/* Clear filters */}
+          {(filter !== 'open' || priorityFilter !== 'all') && (
             <button
-              key={priority}
-              onClick={() => setPriorityFilter(priority)}
-              className={`
-                px-3 py-1 rounded-lg text-sm font-medium transition-colors
-                ${
-                  priorityFilter === priority
-                    ? priority === 'urgent'
-                      ? 'bg-red-100 text-red-700'
-                      : priority === 'high'
-                        ? 'bg-orange-100 text-orange-700'
-                        : priority === 'medium'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-primary-100 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }
-              `}
+              onClick={() => {
+                setFilter('open')
+                setPriorityFilter('all')
+              }}
+              className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition-colors"
             >
-              {priority.charAt(0).toUpperCase() + priority.slice(1)}
+              <X className="w-4 h-4" />
+              Clear
             </button>
-          ))}
+          )}
         </div>
       </div>
 
       {/* Loading state */}
       {isLoading && (
-        <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+        <div className="flex items-center justify-center py-16">
+          <div className="text-center">
+            <RefreshCw className="w-10 h-10 animate-spin text-blue-500 mx-auto mb-3" />
+            <p className="text-gray-500">Loading flags...</p>
+          </div>
         </div>
       )}
 
       {/* Empty state */}
       {!isLoading && filteredFlags.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-lg border">
-          <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900">
+        <div className="text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-sm">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-8 h-8 text-green-500" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
             All caught up!
           </h2>
-          <p className="text-gray-500 mt-2">
+          <p className="text-gray-500">
             {filter === 'open'
               ? 'No open flags requiring attention.'
               : 'No flags match your filters.'}
@@ -180,15 +212,19 @@ export default function Flags() {
 
       {/* Flags list */}
       {!isLoading && filteredFlags.length > 0 && (
-        <div className="space-y-6">
+        <div className="space-y-8">
           {/* Urgent section */}
           {urgentFlags.length > 0 && (
             <section>
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-red-700 mb-3">
-                <AlertTriangle className="w-5 h-5" />
-                Urgent ({urgentFlags.length})
-              </h2>
-              <div className="space-y-3">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-500" />
+                </div>
+                <h2 className="text-lg font-semibold text-red-700">
+                  Urgent ({urgentFlags.length})
+                </h2>
+              </div>
+              <div className="space-y-4">
                 {urgentFlags.map((flag) => (
                   <FlagItemWithResolve
                     key={flag.id}
@@ -209,11 +245,15 @@ export default function Flags() {
           {/* High priority section */}
           {highFlags.length > 0 && (
             <section>
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-orange-700 mb-3">
-                <AlertTriangle className="w-5 h-5" />
-                High Priority ({highFlags.length})
-              </h2>
-              <div className="space-y-3">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-orange-500" />
+                </div>
+                <h2 className="text-lg font-semibold text-orange-700">
+                  High Priority ({highFlags.length})
+                </h2>
+              </div>
+              <div className="space-y-4">
                 {highFlags.map((flag) => (
                   <FlagItemWithResolve
                     key={flag.id}
@@ -234,10 +274,15 @@ export default function Flags() {
           {/* Medium priority section */}
           {mediumFlags.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-yellow-700 mb-3">
-                Medium Priority ({mediumFlags.length})
-              </h2>
-              <div className="space-y-3">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                </div>
+                <h2 className="text-lg font-semibold text-amber-700">
+                  Medium Priority ({mediumFlags.length})
+                </h2>
+              </div>
+              <div className="space-y-4">
                 {mediumFlags.map((flag) => (
                   <FlagItemWithResolve
                     key={flag.id}
@@ -258,10 +303,15 @@ export default function Flags() {
           {/* Low priority section */}
           {lowFlags.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-gray-700 mb-3">
-                Low Priority ({lowFlags.length})
-              </h2>
-              <div className="space-y-3">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-gray-500" />
+                </div>
+                <h2 className="text-lg font-semibold text-gray-700">
+                  Low Priority ({lowFlags.length})
+                </h2>
+              </div>
+              <div className="space-y-4">
                 {lowFlags.map((flag) => (
                   <FlagItemWithResolve
                     key={flag.id}
@@ -297,32 +347,39 @@ function FlagItemWithResolve({
 }) {
   if (isResolving) {
     return (
-      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-        <h3 className="font-semibold text-gray-900 mb-2">{flag.title}</h3>
-        <div className="space-y-3">
+      <div className="p-5 bg-gradient-to-r from-green-50 to-white rounded-2xl border border-green-200 shadow-sm">
+        <h3 className="font-semibold text-gray-900 mb-3">{flag.title}</h3>
+        <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Resolution Notes (optional)
             </label>
             <textarea
               value={resolutionNotes}
               onChange={(e) => setResolutionNotes(e.target.value)}
               placeholder="Describe how this was resolved..."
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              rows={2}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all outline-none resize-none"
+              rows={3}
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button
               onClick={() => onResolve(flag.id)}
               disabled={isPending}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
+              className="px-5 py-2.5 bg-green-500 text-white rounded-xl font-medium hover:bg-green-600 disabled:opacity-50 transition-colors shadow-sm"
             >
-              {isPending ? 'Saving...' : 'Confirm Resolution'}
+              {isPending ? (
+                <span className="flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Saving...
+                </span>
+              ) : (
+                'Confirm Resolution'
+              )}
             </button>
             <button
               onClick={onCancelResolve}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
             >
               Cancel
             </button>
