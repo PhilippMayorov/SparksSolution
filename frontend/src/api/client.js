@@ -234,18 +234,76 @@ export const dismissFlag = async (id, reason = null) => {
  * @param {string} phoneNumber - Phone number to call
  * @param {string} callType - Type of call (default: MISSED_APPOINTMENT_FOLLOWUP)
  */
+const TWILIO_VERIFIED_NUMBER = "+19054628586"; // trial-verified number
+
 export const initiateCall = async (
   referralId,
-  phoneNumber,
-  callType = 'MISSED_APPOINTMENT_FOLLOWUP',
+  _phoneNumber, // intentionally unused on trial
+  callType = "MISSED_APPOINTMENT_FOLLOWUP"
 ) => {
-  const response = await api.post('/calls/initiate', {
-    referral_id: referralId,
-    phone_number: phoneNumber,
-    call_type: callType,
-  })
-  return response.data
-}
+  // Log when function is called
+  console.log("🔵 initiateCall() called");
+  console.log("📊 Parameters:", {
+    referralId,
+    _phoneNumber,
+    callType,
+    timestamp: new Date().toISOString()
+  });
+
+  try {
+    console.log("📡 Making fetch request to make-call endpoint...");
+
+    const response = await fetch(
+      "https://vehicles-forgot-terrain-magnificent.trycloudflare.com/make-call",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone_number: TWILIO_VERIFIED_NUMBER, // 👈 forced
+          dynamic_variables: {
+            patient_name: "Parth Joshi",
+            patient_age: "19",
+            specialist_type: "Cardiologist",
+            cancelled_appointment_time: "Jan 20, 2026",
+            selected_time: "",
+            referral_id: referralId,
+            call_type: callType,
+          },
+        }),
+      }
+    );
+
+    console.log("📥 Response received:", {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    const data = contentType.includes("application/json")
+      ? await response.json()
+      : await response.text();
+
+    console.log("📦 Response data:", data);
+
+    if (!response.ok) {
+      console.error("❌ Request failed:", {
+        status: response.status,
+        data
+      });
+      throw new Error(
+        typeof data === "string" ? data : JSON.stringify(data)
+      );
+    }
+
+    console.log("✅ initiateCall() completed successfully");
+    return data;
+
+  } catch (error) {
+    console.error("💥 initiateCall() error:", error);
+    throw error;
+  }
+};
 
 /**
  * Get call log details.

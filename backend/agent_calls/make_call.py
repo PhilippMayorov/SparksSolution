@@ -6,6 +6,7 @@ WebSocket bridge implementation (CORRECT VERSION)
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Connect
+from fastapi.middleware.cors import CORSMiddleware  # ADD THIS
 import uvicorn
 import asyncio
 import websockets
@@ -15,20 +16,28 @@ from pydantic import BaseModel
 from typing import Any, Dict
 import re
 import time
+from dotenv import load_dotenv
 
-WEBHOOK_BASE_URL = os.environ["WEBHOOK_BASE_URL"]
+load_dotenv()
 
 # ============================================================================
 # CONFIGURATION - PUT YOUR CREDENTIALS HERE
 # ============================================================================
 
-###PASTE API KEYS HERE
 
 # ============================================================================
 # APP SETUP
 # ============================================================================
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # For hackathon - allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 CALL_CONTEXT: dict[str, dict] = {}
@@ -245,6 +254,3 @@ async def media_stream(websocket: WebSocket):
 
     finally:
         await websocket.close()
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
