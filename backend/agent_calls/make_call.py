@@ -89,14 +89,13 @@ def incoming_call():
     return Response(content=str(response), media_type="application/xml")
 
 
-
-def update_referral_date(patient_name, new_referral_date):
+def update_scheduled_date(patient_name, new_scheduled_date):
     """
-    Update the referral date for a patient by name.
+    Update the scheduled date for a patient by name.
 
     Args:
         patient_name: The name of the patient to update
-        new_referral_date: The new referral date in format 'YYYY-MM-DD'
+        new_scheduled_date: The new scheduled date in format 'YYYY-MM-DD'
 
     Returns:
         dict: Response data with updated record(s) or error message
@@ -104,11 +103,11 @@ def update_referral_date(patient_name, new_referral_date):
     try:
         # Update the referral_date for matching patient_name
         response = supabase.table("referrals").update({
-            "referral_date": new_referral_date
+            "scheduled_date": new_scheduled_date
         }).eq("patient_name", patient_name).execute()
 
         if response.data and len(response.data) > 0:
-            print(f"Successfully updated referral date for {patient_name} to {new_referral_date}")
+            print(f"Successfully updated scheduled date for {patient_name} to {new_scheduled_date}")
             print(f"Updated {len(response.data)} record(s)")
             return {"success": True, "data": response.data}
         else:
@@ -116,7 +115,7 @@ def update_referral_date(patient_name, new_referral_date):
             return {"success": False, "message": "No matching records found"}
 
     except Exception as e:
-        print(f"Error updating referral date: {e}")
+        print(f"Error updating scheduled date: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -235,9 +234,9 @@ async def media_stream(websocket: WebSocket):
 
                                     hangup_after_audio.set()
 
-                                if payload.get('Rescheduled') and payload.get('referral_date'):
-                                    date_formatted = payload['referral_date'].replace('/', '-')
-                                    update_referral_date(payload['name'], date_formatted)
+                                if payload.get('Rescheduled') and payload.get('scheduled_date'):
+                                    date_formatted = payload['scheduled_date']
+                                    update_scheduled_date(payload['name'], date_formatted)
                     
                             except json.JSONDecodeError:
                                 # Normal spoken text — ignore
