@@ -39,7 +39,7 @@ app.add_middleware(
     allow_headers=["*"],
 
 )
-twilio_client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+twilio_client = TwilioClient(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 
 CALL_CONTEXT: dict[str, dict] = {}
 
@@ -49,7 +49,7 @@ class CallRequest(BaseModel):
 
 @app.get("/")
 def home():
-    return {"status": "ready", "agent": ELEVENLABS_AGENT_ID}
+    return {"status": "ready", "agent": os.getenv("ELEVENLABS_AGENT_ID")}
 
 def create_flagged_entry(name):
     """
@@ -142,8 +142,8 @@ def make_call(req: CallRequest):
     try:
         call = twilio_client.calls.create(
             to=req.phone_number,
-            from_=TWILIO_PHONE_NUMBER,
-            url=f"{WEBHOOK_BASE_URL}/incoming-call",
+            from_=os.getenv("TWILIO_PHONE_NUMBER"),
+            url=f"{os.getenv('WEBHOOK_BASE_URL')}/incoming-call",
             method='POST',
         )
 
@@ -165,7 +165,7 @@ def incoming_call():
 
     connect = Connect()
 
-    ws_url = WEBHOOK_BASE_URL.replace("https://", "wss://") + "/media-stream"
+    ws_url = os.getenv("WEBHOOK_BASE_URL").replace("https://", "wss://") + "/media-stream"
     connect.stream(url=ws_url, track="inbound_track")
 
     response.append(connect)
@@ -214,12 +214,12 @@ async def media_stream(websocket: WebSocket):
     last_audio_time = 0.0
 
     # Connect to ElevenLabs agent
-    elevenlabs_url = f"wss://api.elevenlabs.io/v1/convai/conversation?agent_id={ELEVENLABS_AGENT_ID}"
+    elevenlabs_url = f"wss://api.elevenlabs.io/v1/convai/conversation?agent_id={os.getenv('ELEVENLABS_AGENT_ID')}"
 
     try:
         async with websockets.connect(
                 elevenlabs_url,
-                additional_headers={"xi-api-key": ELEVENLABS_API_KEY}
+                additional_headers={"xi-api-key": os.getenv("ELEVENLABS_API_KEY")}
         ) as elevenlabs_ws:
             print("✅ ElevenLabs agent connected")
             stream_sid = None
